@@ -37,14 +37,16 @@ RESULT_FILE = ROOT / "tests/phase3_final_results.json"
 def guard_database(name, expected):
     if len(name.encode("utf-8")) > 38:
         raise RuntimeError("Test database name exceeds the 38-byte safety limit")
-    if name != expected or not re.fullmatch(r"hrone_p3v_[0-9]{8}_[0-9a-f]{16}", name):
+    if name != expected or not re.fullmatch(r"hrone_p[34]v_[0-9]{8}_[0-9a-f]{16}", name):
         raise RuntimeError("Unsafe test database identity; refusing writes or cleanup")
     if name == "attendance_db":
         raise RuntimeError("Development database must never be a write target")
 
 
-def generate_database_name(token):
-    name = "hrone_p3v_" + datetime.now(IST).strftime("%Y%m%d") + "_" + token[:16]
+def generate_database_name(token, phase=3):
+    if phase not in (3, 4):
+        raise RuntimeError("Unsupported verification phase")
+    name = f"hrone_p{phase}v_" + datetime.now(IST).strftime("%Y%m%d") + "_" + token[:16]
     guard_database(name, name)
     return name
 
@@ -85,25 +87,79 @@ def development_snapshot(client):
     return result
 
 
+def child_failure(error, operation):
+    """Inspect suppressed exception context without emitting exception messages."""
+    current = error
+    seen = set()
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        if isinstance(current, PyMongoError):
+            return mongo_failure(current, operation)
+        current = current.__cause__ or current.__context__
+    category = "child_startup_error"
+    if isinstance(error, ImportError):
+        category = "import_error"
+    elif isinstance(error, OSError):
+        category = "os_error"
+    elif "Duplicate natural keys" in str(error):
+        category = "duplicate_natural_keys"
+    elif operation in ("database_environment", "database_identity"):
+        category = "database_identity_mismatch"
+    return {"operation": operation, "type": type(error).__name__, "code": None, "category": category}
+
+
+def write_child_failure(args, failure):
+    destination = pathlib.Path(args.ready_file).with_suffix(".error.json")
+    staging = destination.with_suffix(".tmp")
+    staging.write_text(json.dumps(failure), encoding="utf-8")
+    staging.replace(destination)
+
+
 async def serve(args):
+    diagnostics = {"operation": "database_environment"}
+    try:
+        await serve_child(args, diagnostics)
+    except (Exception, SystemExit) as error:
+        failure = diagnostics.get("failure") or child_failure(error, diagnostics["operation"])
+        write_child_failure(args, failure)
+        raise
+
+
+async def serve_child(args, diagnostics):
     guard_database(args.database, args.database)
     if os.getenv("MONGO_DB") != args.database:
         raise RuntimeError("Child database environment does not match test identity")
+    diagnostics["operation"] = "application_import"
     from app import main
+    diagnostics["operation"] = "database_environment"
     if os.getenv("MONGO_DB") != args.database:
         raise RuntimeError("Child database environment changed during application import")
     import uvicorn
+    diagnostics["operation"] = "uvicorn_configuration"
+
+    async def diagnostic_app(scope, receive, send):
+        try:
+            await main.app(scope, receive, send)
+        except Exception as error:
+            if scope["type"] == "lifespan":
+                diagnostics["failure"] = child_failure(error, "application_lifespan")
+                write_child_failure(args, diagnostics["failure"])
+            raise
+
     # Bind port 0 in the child itself: no released-port race with another server.
-    server = uvicorn.Server(uvicorn.Config(main.app, host="127.0.0.1", port=0,
+    server = uvicorn.Server(uvicorn.Config(diagnostic_app, host="127.0.0.1", port=0,
                                           log_level="critical", access_log=False))
+    diagnostics["operation"] = "server_startup_or_port_bind"
     task = asyncio.create_task(server.serve())
     while not server.started:
         if task.done():
             await task
-            return
+            raise RuntimeError("Child server stopped before startup completed")
         await asyncio.sleep(0.01)
+    diagnostics["operation"] = "database_identity"
     guard_database(main.db.name, args.database)
     port = server.servers[0].sockets[0].getsockname()[1]
+    diagnostics["operation"] = "readiness_file"
     ready = pathlib.Path(args.ready_file)
     staging = ready.with_suffix(".tmp")
     staging.write_text(json.dumps({
@@ -111,6 +167,7 @@ async def serve(args):
         "port": port,
     }), encoding="utf-8")
     staging.replace(ready)
+    diagnostics["operation"] = "server_running"
     await task
 
 
@@ -182,10 +239,10 @@ def validate_schema(contract, schema, value):
         assert value <= schema["maximum"], "Response numeric maximum violated"
 
 
-def run_verification():
+def run_verification(extra_checks=None, phase=3):
     from app import main
     token = uuid.uuid4().hex
-    name = generate_database_name(token)
+    name = generate_database_name(token) if phase == 3 else generate_database_name(token, phase=phase)
     guard_database(name, name)
     result = {"database": name, "date_ist": datetime.now(IST).isoformat(),
               "checks": {}, "http_requests": 0, "status": "BLOCKED"}
@@ -225,7 +282,14 @@ def run_verification():
         process = subprocess.Popen(command, cwd=ROOT, env=child_env,
                                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         while not ready.exists():
-            if process.poll() is not None:
+            exit_code = process.poll()
+            if exit_code is not None:
+                result["child_exit_code"] = exit_code
+                diagnostic_file = ready.with_suffix(".error.json")
+                if diagnostic_file.exists():
+                    result["child_diagnostics"] = json.loads(diagnostic_file.read_text(encoding="utf-8"))
+                else:
+                    result["child_diagnostics"] = {"category": "unavailable"}
                 raise RuntimeError("Test server exited before readiness; no HTTP writes attempted")
             if time.perf_counter() - started > 20:
                 result["startup_observed_seconds"] = round(time.perf_counter() - started, 3)
@@ -250,7 +314,8 @@ def run_verification():
                 status, data = response.status, json.load(response)
             result["http_requests"] += 1
             assert status in expected, "Unexpected HTTP status for " + method + " " + path + ": " + str(status)
-            response_schema = contract["paths"][path][method.lower()]["responses"][str(status)]
+            contract_path = "/attendance/{emp_code}/{date}" if method == "PATCH" else path
+            response_schema = contract["paths"][contract_path][method.lower()]["responses"][str(status)]
             if "$ref" in response_schema:
                 response_schema = contract["components"]["responses"][response_schema["$ref"].split("/")[-1]]
             validate_schema(contract, response_schema["content"]["application/json"]["schema"], data)
@@ -266,7 +331,8 @@ def run_verification():
         with urlopen(base + "/openapi.json", timeout=8) as response:
             actual = json.load(response)
         expected_ops = {("get", "/health"), ("post", "/employees"), ("get", "/employees"),
-                        ("post", "/attendance/punch-in"), ("get", "/attendance")}
+                        ("post", "/attendance/punch-in"), ("get", "/attendance"),
+                        ("post", "/attendance/punch-out"), ("patch", "/attendance/{emp_code}/{date}")}
         assert {(method, path) for path, item in actual["paths"].items() for method in item} == expected_ops
         for method, path in expected_ops:
             assert actual["paths"][path][method]["operationId"] == contract["paths"][path][method]["operationId"]
@@ -408,6 +474,10 @@ def run_verification():
             assert list(index["key"].items()) == fields and bool(index.get("unique", False)) == unique
             indexes.append({"collection": collection, "name": index_name, "keys": fields, "unique": unique})
         passed("indexes_and_repeated_setup", indexes=indexes)
+        if extra_checks is not None:
+            guard_database(database.name, name)
+            operation = "phase4.additional_checks"
+            extra_checks(http, database, codes, epoch, passed)
         result["status"] = "PASS"
     except PyMongoError as error:
         result["failure"] = mongo_failure(error, operation)

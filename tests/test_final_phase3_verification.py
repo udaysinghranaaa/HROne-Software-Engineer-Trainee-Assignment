@@ -13,7 +13,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
-from pymongo.errors import OperationFailure
+from pymongo.errors import ConfigurationError, OperationFailure
 
 import final_phase3_verification as harness
 
@@ -57,7 +57,7 @@ class HarnessSafetyTests(unittest.TestCase):
         main.connect_database.assert_not_called()
 
     def run_fake(self, insert_error=None, acknowledged=True, mismatch=False,
-                 unsafe_identity=False, collision=False, cleanup_error=None):
+                 unsafe_identity=False, collision=False, cleanup_error=None, startup_failure=None):
         client = MagicMock()
         database = MagicMock()
         owner = MagicMock()
@@ -80,13 +80,17 @@ class HarnessSafetyTests(unittest.TestCase):
             owner.find_one.side_effect = cleanup_error
         main = SimpleNamespace(client=client, connect_database=MagicMock())
         snapshot = {"employees": {"count": 6}, "attendance_logs": {"count": 9}}
+        def failed_child(command, **kwargs):
+            ready = pathlib.Path(command[command.index("--ready-file") + 1])
+            ready.with_suffix(".error.json").write_text(json.dumps(startup_failure), encoding="utf-8")
+            return SimpleNamespace(pid=12345, poll=lambda: 1)
         with tempfile.TemporaryDirectory() as directory:
             result_file = pathlib.Path(directory) / "results.json"
             with patch.dict("sys.modules", {"app": SimpleNamespace(main=main)}), \
                  patch.object(harness, "generate_database_name", return_value=name), \
                  patch.object(harness, "development_snapshot", return_value=snapshot), \
                  patch.object(harness, "RESULT_FILE", result_file), \
-                 patch.object(harness.subprocess, "Popen", side_effect=OSError("fake process stop")) as process, \
+                 patch.object(harness.subprocess, "Popen", side_effect=failed_child if startup_failure else OSError("fake process stop")) as process, \
                  contextlib.redirect_stdout(io.StringIO()):
                 harness.run_verification()
             result = json.loads(result_file.read_text(encoding="utf-8"))
@@ -288,6 +292,68 @@ class HarnessSafetyTests(unittest.TestCase):
     def test_child_rejects_wrong_environment_before_server_start(self):
         with self.assertRaisesRegex(RuntimeError, "Child database environment"):
             self.run_fake_server(environment_name="attendance_db")
+
+    def test_suppressed_mongo_startup_context_is_sanitized(self):
+        for message, category in (("DNS failed mongodb://user:password@private", "dns"),
+                                  ("TLS handshake failed mongodb://user:password@private", "tls")):
+            with self.subTest(category=category):
+                try:
+                    try:
+                        raise ConfigurationError(message)
+                    except ConfigurationError:
+                        raise RuntimeError("MongoDB startup/index setup failed") from None
+                except RuntimeError as error:
+                    report = harness.child_failure(error, "application_lifespan")
+                self.assertEqual(report["type"], "ConfigurationError")
+                self.assertEqual(report["category"], category)
+                self.assertNotIn("password", json.dumps(report))
+                self.assertNotIn("private", json.dumps(report))
+
+    def test_failed_lifespan_writes_sanitized_diagnostics_before_readiness(self):
+        async def failing_app(scope, receive, send):
+            try:
+                raise OperationFailure("not authorized mongodb://user:password@private", code=13)
+            except OperationFailure:
+                raise RuntimeError("MongoDB startup/index setup failed") from None
+        server = SimpleNamespace(started=False)
+        def make_server(application):
+            async def run():
+                try:
+                    await application({"type": "lifespan"}, None, None)
+                except RuntimeError:
+                    pass  # Uvicorn reports failed startup and returns without readiness.
+            server.serve = run
+            return server
+        uvicorn = SimpleNamespace(Config=lambda application, **kwargs: application, Server=make_server)
+        name = "hrone_p4v_20261009_0123456789abcdef"
+        main = SimpleNamespace(app=failing_app)
+        with tempfile.TemporaryDirectory() as directory:
+            ready = pathlib.Path(directory) / "ready.json"
+            args = SimpleNamespace(database=name, ready_file=str(ready), token="owned")
+            with patch.dict(os.environ, {"MONGO_DB": name}), \
+                 patch.dict("sys.modules", {"app": SimpleNamespace(main=main), "uvicorn": uvicorn}):
+                with self.assertRaisesRegex(RuntimeError, "before startup completed"):
+                    asyncio.run(harness.serve(args))
+            self.assertFalse(ready.exists())
+            report = json.loads(ready.with_suffix(".error.json").read_text(encoding="utf-8"))
+            self.assertEqual(report, {"operation": "application_lifespan", "type": "OperationFailure",
+                                      "code": 13, "category": "authorization"})
+            self.assertNotIn("password", json.dumps(report))
+
+    def test_parent_records_child_exit_diagnostics_and_preserves_cleanup(self):
+        failure = {"operation": "application_lifespan", "type": "ConfigurationError", "code": None, "category": "dns"}
+        result, client, _, _ = self.run_fake(startup_failure=failure)
+        self.assertEqual(result["child_exit_code"], 1)
+        self.assertEqual(result["child_diagnostics"], failure)
+        self.assertEqual(result["http_requests"], 0)
+        self.assertEqual(result["status"], "BLOCKED")
+        self.assertEqual(result["cleanup"], "PASS")
+        client.drop_database.assert_called_once_with("hrone_p3v_20261009_0123456789abcdef")
+
+    def test_non_mongo_import_error_never_emits_sensitive_message(self):
+        report = harness.child_failure(ImportError("private path and password=hidden"), "application_import")
+        self.assertEqual(report["category"], "import_error")
+        self.assertNotIn("hidden", json.dumps(report))
 
 
 if __name__ == "__main__":

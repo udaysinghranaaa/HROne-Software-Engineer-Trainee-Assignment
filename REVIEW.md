@@ -1,5 +1,29 @@
 # REVIEW.md
 
+## Current status: Phase 4 implementation
+
+The earlier BLOCKED results below are historical. The saved `tests/phase3_final_results.json` now records Phase 3 PASS: 11 live checks, 46 HTTP requests, 2.485-second startup, employee and punch-in races passed, six employees/nine attendance logs unchanged, child stopped and owned database cleanup PASS. That file was supplied by the user's successful manual run and was not regenerated during Phase 4.
+
+Phase 4 adds `POST /attendance/punch-out` and `PATCH /attendance/{emp_code}/{date}`. Punch-out finds the latest punch-in at or before the truncated instant, including overnight records; returns 404 when none exists, 409 for a closed/conflicting record and 422 for equal times or durations over 24 hours. It preserves manual history, status and existing lateness.
+
+PATCH validates the exact natural-key date, required reason/actor, permitted status and strict bounded millisecond timestamps. Presence requires a punch-in on the original R1 attendance day; absence clears both times. Corrections recalculate R2-R5 and append one `{at, by, reason, changes}` entry containing only actual changes, including derived values. No-op corrections are 422. Missing history/half_day retain their legacy defaults.
+
+Two source ambiguities were raised before completing the APIs. The user's explicit decisions are: PATCH rejects derived/unsupported fields with 422; existing Phase 3 field-ignore behavior remains. Punch-out before every known punch-in returns 404 under the documented candidate selector. PATCH codes follow the plain-string path schema, not the employee-creation regex.
+
+Both persistence operations use natural-key/snapshot conditional `find_one_and_update`. A competing change yields 409. PATCH's `$set` and `$push` are one atomic document operation, so corrected fields cannot be saved without their required history entry. No automatic retries, process locks, extra revision fields or transactions are introduced. Previous history and unrelated fields are preserved.
+
+The original four indexes remain; the fifth, `attendance_latest_punch`, supports employee-scoped latest-punch selection. Startup stays idempotent. Whole-second UTC BSON storage, IST dates/overnight shift bounds, 10-minute strict grace, floor minutes, 30-minute overtime, decimal half-up hours and rounded 4.50-hour half-day logic reuse Phase 3 helpers.
+
+Executed isolated verification: `.venv/Scripts/python.exe -B -m unittest discover -s tests -v` ran **86 tests: 86 passed, 0 failed, 0 skipped** (35 original application, 23 original harness, 28 Phase 4). Tests cover real parallel ASGI calls with atomic fake MongoDB writes, competing punch-out/PATCH, exact audits, database failures, legacy records, time boundaries and OpenAPI request/response checks. The old exact route/index assertions now require seven implemented operations and five indexes; their existing contract checks were retained. AST syntax checks passed for application and every test script.
+
+`tests/final_phase4_verification.py` is prepared for manual execution only. It shares the existing harness safety workflow, uses a fresh 35-byte `hrone_p4v_` database, checks collisions and acknowledged ownership, verifies child PID/database/token and its bound localhost port, checks real HTTP races and BSON/audit values, compares development snapshots, then stops its server and cleans up only after exact ownership verification. Phase 4 output uses `tests/phase4_final_results.json`; the Phase 3 evidence file is preserved.
+
+**Phase 4 live verification: NOT EXECUTED.** No Atlas connection, record/index writes, deletes, permission changes or seed execution occurred during this implementation. Original API contract, problem statement and sample/seed files are unchanged. Live MongoDB concurrency, query plans, startup timing with the fifth index and 100k-record performance remain unmeasured. No Phase 5 analytics or Phase 6 admin API was implemented.
+
+Manual command from `candidate_kit`: `.venv/Scripts/python.exe -B tests/final_phase4_verification.py`.
+
+## Historical Phase 2/3 review and verification
+
 List every defect you found in the starter `app/main.py` (helpers and endpoints). For each one:
 
 | # | Where (function / line) | What is wrong | How you'd notice it (test, input, or symptom) | How you fixed it |

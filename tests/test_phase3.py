@@ -471,7 +471,7 @@ class Phase3Tests(unittest.TestCase):
         main.ensure_indexes(main.db)
         for collection, fields, name, unique in main.INDEXES:
             self.assertEqual(main.db[collection].indexes[name], (fields, unique))
-        self.assertEqual(sum(len(main.db[name].indexes) for name in ["employees", "attendance_logs"]), 4)
+        self.assertEqual(sum(len(main.db[name].indexes) for name in ["employees", "attendance_logs"]), 5)
         self.assertEqual((main.db.employees.docs, main.db.attendance_logs.docs), before)
 
     def test_duplicate_audit_stops_before_index_changes_D27(self):
@@ -533,11 +533,12 @@ class Phase3Tests(unittest.TestCase):
             collection.error = ServerSelectionTimeoutError("private connection string")
             self.assertEqual(self.http("GET", path), (503, {"detail": "MongoDB unavailable"}))
 
-    def test_only_five_routes_and_contract_schemas(self):
+    def test_only_implemented_routes_and_contract_schemas(self):
         schema = main.app.openapi()
         operations = {(method.upper(), path) for path, item in schema["paths"].items() for method in item}
         self.assertEqual(operations, {("GET", "/health"), ("POST", "/employees"), ("GET", "/employees"),
-                                      ("POST", "/attendance/punch-in"), ("GET", "/attendance")})
+                                      ("POST", "/attendance/punch-in"), ("GET", "/attendance"),
+                                      ("POST", "/attendance/punch-out"), ("PATCH", "/attendance/{emp_code}/{date}")})
         self.assertEqual(set(main.EmployeeIn.model_fields), {"emp_code", "name", "email", "department", "shift_start", "shift_end", "joined_on"})
         self.assertEqual(set(main.PunchInIn.model_fields), {"emp_code", "punched_at", "status"})
         employee = schema["paths"]["/employees"]

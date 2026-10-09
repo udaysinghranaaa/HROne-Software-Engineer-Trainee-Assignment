@@ -24,3 +24,19 @@ MongoDB **6.0 or newer** is required (the grader uses 7.0). MongoDB Atlas free t
 ## Submit
 A public Git repository with `app/main.py`, `requirements.txt`, `REVIEW.md`, `DECISIONS.md` and a short `README.md`.
 No `.env`, no secrets, no Dockerfile.
+
+## Phase 4 status and verification
+
+Employee APIs and attendance listing, punch-in, punch-out and manual correction are implemented. Analytics and admin explain remain for later phases. Run isolated tests from this directory:
+
+```powershell
+.\.venv\Scripts\python.exe -B -m unittest discover -s tests -v
+```
+
+For **manual, opt-in** Atlas integration using an owned temporary test database:
+
+```powershell
+.\.venv\Scripts\python.exe -B tests/final_phase4_verification.py
+```
+
+The verifier reads `attendance_db` for before/after snapshots; writes and verified cleanup target only its unique temporary database. It does not run the seed script. Phase 4 live integration has not yet been executed; see `REVIEW.md` and `DECISIONS.md` for evidence, atomicity and limitations.
