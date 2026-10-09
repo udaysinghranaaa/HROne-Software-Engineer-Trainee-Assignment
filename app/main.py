@@ -9,100 +9,338 @@ works, but nobody has reviewed it. Read PROBLEM_STATEMENT.docx for what is expec
 openapi.yaml for the contract and DATA_MODEL.md for what is stored in MongoDB.
 """
 import os
-from datetime import datetime, timedelta, timezone
-from typing import Optional
+from contextlib import asynccontextmanager
+from datetime import date, datetime, time, timedelta, timezone
+from decimal import Decimal, ROUND_HALF_UP
+from typing import Annotated, Literal, Optional
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
-from pymongo import MongoClient
+from fastapi import FastAPI, HTTPException, Query
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
+from pydantic import AfterValidator, BaseModel, Field, model_validator
+from pymongo import MongoClient, timeout
+from pymongo.errors import DuplicateKeyError, PyMongoError
 
 load_dotenv()
 
-client = MongoClient(os.getenv("MONGO_URI", "mongodb://localhost:27017"))
-db = client[os.getenv("MONGO_DB", "attendance_db")]
+# Establish connections in lifespan, so importing the module never needs DNS/network.
+client = None
+db = None
 
+UTC = timezone.utc
 IST = timezone(timedelta(hours=5, minutes=30))
+EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
 
-app = FastAPI(title="Employee Attendance & Analytics API", version="2.0.0")
+# Only indexes needed by the five existing endpoints are created in this phase.
+INDEXES = (
+    ("employees", [("emp_code", 1)], "employee_code_unique", True),
+    ("employees", [("department", 1), ("emp_code", 1)], "employee_department_code", False),
+    ("attendance_logs", [("emp_code", 1), ("date", 1)], "attendance_employee_date_unique", True),
+    ("attendance_logs", [("date", -1), ("emp_code", 1)], "attendance_date_code", False),
+)
+
+
+def connect_database() -> None:
+    global client, db
+    client = MongoClient(
+        os.getenv("MONGO_URI", "mongodb://localhost:27017"),
+        tz_aware=True, connect=False, serverSelectionTimeoutMS=3000,
+        connectTimeoutMS=5000, socketTimeoutMS=5000, timeoutMS=5000,
+    )
+    db = client[os.getenv("MONGO_DB", "attendance_db")]
+
+
+def ensure_indexes(database) -> None:
+    """Audit both natural keys before changing metadata; never repair data here."""
+    for collection, fields, _, unique in INDEXES:
+        if not unique:
+            continue
+        key = {field: f"${field}" for field, _ in fields}
+        duplicates = database[collection].aggregate([
+            {"$group": {"_id": key, "count": {"$sum": 1}}},
+            {"$match": {"count": {"$gt": 1}}},
+            {"$limit": 1},
+        ])
+        if next(iter(duplicates), None) is not None:
+            raise RuntimeError(f"Duplicate natural keys in {collection}; index setup stopped. No records changed.")
+    for collection, fields, name, unique in INDEXES:
+        database[collection].create_index(fields, name=name, unique=unique)
+
+
+@asynccontextmanager
+async def lifespan(application: FastAPI):
+    try:
+        # One budget for ping, duplicate audit and all startup index operations.
+        with timeout(15):
+            if client is None:
+                connect_database()
+            client.admin.command("ping")
+            ensure_indexes(db)
+    except PyMongoError:
+        if client is not None:
+            client.close()
+        raise RuntimeError("MongoDB startup/index setup failed; check connectivity and index configuration.") from None
+    except RuntimeError:
+        if client is not None:
+            client.close()
+        raise
+    try:
+        yield
+    finally:
+        client.close()
+
+
+app = FastAPI(title="Employee Attendance & Analytics API", version="2.0.0", lifespan=lifespan)
 
 
 # --------------------------------------------------------------------------- #
 # Helpers
 # --------------------------------------------------------------------------- #
-def compute_late_minutes(punch_in: datetime, shift_start: str) -> int:
-    h, m = map(int, shift_start.split(":"))
-    start = punch_in.replace(hour=h, minute=m, second=0, microsecond=0)
-    minutes = int((punch_in - start).total_seconds() / 60)
-    return minutes if minutes > 10 else 0
+def as_utc(value: datetime) -> datetime:
+    """Naive datetimes read from legacy PyMongo clients represent UTC, not local time."""
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
 
 
-def compute_work_hours(punch_in: datetime, punch_out: datetime) -> float:
-    return round((punch_out - punch_in).total_seconds() / 3600, 2)
+def truncate_instant(value: datetime) -> datetime:
+    return as_utc(value).replace(microsecond=0)
 
 
-def compute_overtime(punch_out: datetime, shift_end: str, date_str: str) -> int:
-    h, m = map(int, shift_end.split(":"))
-    end = datetime.fromisoformat(date_str).replace(hour=h, minute=m, tzinfo=IST)
-    return max(0, int((punch_out - end).total_seconds() / 60))
+def from_epoch_ms(value: int) -> datetime:
+    return EPOCH + timedelta(seconds=value // 1000)
+
+
+def to_epoch_ms(value: Optional[datetime]) -> Optional[int]:
+    if value is None:
+        return None
+    elapsed = truncate_instant(value) - EPOCH
+    return (elapsed.days * 86400 + elapsed.seconds) * 1000
+
+
+def current_epoch_ms() -> int:
+    return to_epoch_ms(datetime.now(UTC))
+
+
+def attendance_date(punch_in: datetime, shift_start: str, shift_end: str) -> str:
+    local = truncate_instant(punch_in).astimezone(IST)
+    day = local.date()
+    if shift_end <= shift_start and local.time() < time.fromisoformat(shift_end):
+        day -= timedelta(days=1)
+    return day.isoformat()
+
+
+def shift_bounds(date_str: str, shift_start: str, shift_end: str) -> tuple[datetime, datetime]:
+    day = date.fromisoformat(date_str)
+    start = datetime.combine(day, time.fromisoformat(shift_start), IST)
+    end = datetime.combine(day, time.fromisoformat(shift_end), IST)
+    if shift_end <= shift_start:
+        end += timedelta(days=1)
+    return start, end
+
+
+def compute_late_minutes(punch_in: datetime, shift_start: str, date_str: Optional[str] = None) -> int:
+    local = truncate_instant(punch_in).astimezone(IST)
+    day = date.fromisoformat(date_str) if date_str is not None else local.date()
+    start = datetime.combine(day, time.fromisoformat(shift_start), IST)
+    seconds = int((local - start).total_seconds())
+    return seconds // 60 if seconds > 600 else 0
+
+
+def compute_work_hours(punch_in: datetime, punch_out: Optional[datetime]) -> Optional[float]:
+    if punch_out is None:
+        return None
+    duration = truncate_instant(punch_out) - truncate_instant(punch_in)
+    seconds = duration.days * 86400 + duration.seconds
+    return float((Decimal(seconds) / Decimal(3600)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+
+
+def compute_half_day(work_hours: Optional[float]) -> bool:
+    return work_hours is not None and work_hours < 4.50
+
+
+def compute_overtime(punch_out: datetime, shift_end: str, date_str: str, shift_start: str) -> int:
+    _, end = shift_bounds(date_str, shift_start, shift_end)
+    minutes = int((truncate_instant(punch_out) - end).total_seconds() // 60)
+    return minutes if minutes >= 30 else 0
+
+
+def serialize_employee(doc: dict) -> dict:
+    fields = ("emp_code", "name", "email", "department", "shift_start", "shift_end", "joined_on")
+    return {**{field: doc[field] for field in fields}, "created_at": to_epoch_ms(doc["created_at"])}
+
+
+def serialize_attendance(doc: dict) -> dict:
+    """Build a response copy; do not normalize the database record in place."""
+    history = []
+    for entry in doc.get("history", []):
+        changes = {}
+        for field, change in entry["changes"].items():
+            changes[field] = {
+                side: to_epoch_ms(value) if field in ("punch_in", "punch_out") else value
+                for side, value in change.items()
+            }
+        history.append({"at": to_epoch_ms(entry["at"]), "by": entry["by"],
+                        "reason": entry["reason"], "changes": changes})
+    return {
+        "emp_code": doc["emp_code"], "date": doc["date"], "status": doc["status"],
+        "punch_in": to_epoch_ms(doc.get("punch_in")),
+        "punch_out": to_epoch_ms(doc.get("punch_out")),
+        "work_hours": doc.get("work_hours"), "late_minutes": doc.get("late_minutes", 0),
+        "overtime_minutes": doc.get("overtime_minutes", 0),
+        "half_day": doc.get("half_day", False), "history": history,
+    }
 
 
 # --------------------------------------------------------------------------- #
 # Models
 # --------------------------------------------------------------------------- #
+def validate_calendar_date(value: str) -> str:
+    date.fromisoformat(value)
+    return value
+
+
+CalendarDate = Annotated[str, Field(pattern=r"^\d{4}-\d{2}-\d{2}$", json_schema_extra={"format": "date"}),
+                         AfterValidator(validate_calendar_date)]
+ShiftTime = Annotated[str, Field(pattern=r"^([01]\d|2[0-3]):[0-5]\d$")]
+EpochMillis = Annotated[int, Field(strict=True, ge=100000000000, le=4102444800000,
+                                  json_schema_extra={"format": "int64"})]
+PresenceStatus = Literal["PRESENT", "WFH", "ON_DUTY"]
+Status = Literal["PRESENT", "ABSENT", "LEAVE", "WFH", "ON_DUTY"]
+
+
 class EmployeeIn(BaseModel):
+    emp_code: Annotated[str, Field(pattern=r"^EMP\d{4,6}$")]
+    name: Annotated[str, Field(min_length=1, max_length=100)]
+    email: Annotated[str, Field(max_length=120, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")]
+    department: Annotated[str, Field(min_length=1, max_length=50)]
+    shift_start: ShiftTime = "09:30"
+    shift_end: ShiftTime = "18:30"
+    joined_on: CalendarDate
+
+    @model_validator(mode="after")
+    def different_shift_times(self):
+        if self.shift_start == self.shift_end:
+            raise ValueError("shift_start must differ from shift_end")
+        return self
+
+
+class PunchInIn(BaseModel):
+    # PunchInRequest deliberately has no employee-code pattern in openapi.yaml.
+    emp_code: str
+    punched_at: EpochMillis = Field(default_factory=current_epoch_ms)
+    status: PresenceStatus = "PRESENT"
+
+
+class HealthResponse(BaseModel):
+    status: Literal["ok"]
+
+
+class ErrorResponse(BaseModel):
+    detail: str
+
+
+class Employee(BaseModel):
     emp_code: str
     name: str
     email: str
     department: str
-    shift_start: str = "09:30"
-    shift_end: str = "18:30"
-    joined_on: str
+    shift_start: str
+    shift_end: str
+    joined_on: CalendarDate
+    created_at: EpochMillis
 
 
-class PunchInIn(BaseModel):
+class EmployeePage(BaseModel):
+    items: list[Employee]
+    total: int
+    page: int
+    page_size: int
+
+
+class HistoryEntry(BaseModel):
+    at: EpochMillis
+    by: str
+    reason: str
+    changes: dict[str, dict]
+
+
+class AttendanceRecord(BaseModel):
     emp_code: str
-    punched_at: Optional[int] = None
-    status: str = "PRESENT"
+    date: CalendarDate
+    status: Status
+    punch_in: Optional[EpochMillis]
+    punch_out: Optional[EpochMillis]
+    work_hours: Optional[float]
+    late_minutes: int
+    overtime_minutes: int
+    half_day: bool
+    history: list[HistoryEntry]
+
+
+class AttendancePage(BaseModel):
+    items: list[AttendanceRecord]
+    total: int
+    page: int
+    page_size: int
+
+
+@app.exception_handler(PyMongoError)
+async def database_error_handler(request, exception):
+    return JSONResponse(status_code=503, content={"detail": "MongoDB unavailable"})
 
 
 # --------------------------------------------------------------------------- #
 # Endpoints provided
 # --------------------------------------------------------------------------- #
-@app.get("/health")
+@app.get("/health", response_model=HealthResponse, operation_id="health",
+         responses={503: {"model": ErrorResponse}})
 def health():
+    if client is None:
+        raise HTTPException(503, "MongoDB unavailable")
+    try:
+        with timeout(3):
+            client.admin.command("ping")
+    except PyMongoError:
+        raise HTTPException(503, "MongoDB unavailable") from None
     return {"status": "ok"}
 
 
-@app.post("/employees", status_code=201)
+@app.post("/employees", status_code=201, response_model=Employee, operation_id="createEmployee",
+          responses={409: {"model": ErrorResponse}})
 def create_employee(body: EmployeeIn):
-    if db.employees.find_one({"emp_code": body.emp_code}):
-        raise HTTPException(409, "emp_code already exists")
     doc = body.model_dump()
-    doc["created_at"] = datetime.now()
-    db.employees.insert_one(doc)
-    doc.pop("_id", None)
-    return doc
+    doc["created_at"] = truncate_instant(datetime.now(UTC))
+    try:
+        db.employees.insert_one(doc)
+    except DuplicateKeyError:
+        raise HTTPException(409, "emp_code already exists") from None
+    return serialize_employee(doc)
 
 
-@app.get("/employees")
-def list_employees(department: Optional[str] = None, page: int = 1, page_size: int = 20):
+@app.get("/employees", response_model=EmployeePage, operation_id="listEmployees")
+def list_employees(department: Optional[str] = None,
+                   page: Annotated[int, Query(ge=1)] = 1,
+                   page_size: Annotated[int, Query(ge=1, le=100)] = 20):
     q = {}
-    if department:
+    if department is not None:
         q["department"] = department
-    skip = page * page_size
-    total = db.employees.count_documents({})
-    items = list(db.employees.find(q, {"_id": 0}).skip(skip).limit(page_size))
+    skip = (page - 1) * page_size
+    total = db.employees.count_documents(q)
+    cursor = db.employees.find(q, {"_id": 0}).sort("emp_code", 1).skip(skip).limit(page_size)
+    items = [serialize_employee(doc) for doc in cursor]
     return {"items": items, "total": total, "page": page, "page_size": page_size}
 
 
-@app.post("/attendance/punch-in", status_code=201)
+@app.post("/attendance/punch-in", status_code=201, response_model=AttendanceRecord, operation_id="punchIn",
+          responses={404: {"model": ErrorResponse}, 409: {"model": ErrorResponse}})
 def punch_in(body: PunchInIn):
     emp = db.employees.find_one({"emp_code": body.emp_code})
-    ts = datetime.fromtimestamp(body.punched_at / 1000) if body.punched_at else datetime.now()
-    d = ts.date().isoformat()
-    if db.attendance_logs.find_one({"emp_code": body.emp_code, "date": d}):
-        raise HTTPException(409, "already punched in for this date")
+    if emp is None:
+        raise HTTPException(404, "employee not found")
+    ts = from_epoch_ms(body.punched_at)
+    d = attendance_date(ts, emp["shift_start"], emp["shift_end"])
     doc = {
         "emp_code": body.emp_code,
         "date": d,
@@ -110,28 +348,32 @@ def punch_in(body: PunchInIn):
         "punch_in": ts,
         "punch_out": None,
         "work_hours": None,
-        "late_minutes": compute_late_minutes(ts, emp["shift_start"]),
+        "late_minutes": compute_late_minutes(ts, emp["shift_start"], d),
         "overtime_minutes": 0,
         "half_day": False,
         "history": [],
     }
-    res = db.attendance_logs.insert_one(doc)
-    doc["id"] = str(res.inserted_id)
-    doc.pop("_id", None)
-    return doc
+    try:
+        db.attendance_logs.insert_one(doc)
+    except DuplicateKeyError:
+        raise HTTPException(409, "already punched in for this date") from None
+    return serialize_attendance(doc)
 
 
-@app.get("/attendance")
+@app.get("/attendance", response_model=AttendancePage, operation_id="listAttendance")
 def list_attendance(
     emp_code: Optional[str] = None,
-    date_from: Optional[str] = None,
-    date_to: Optional[str] = None,
-    status: Optional[str] = None,
-    page: int = 1,
-    page_size: int = 20,
+    date_from: Annotated[Optional[CalendarDate], Query()] = None,
+    date_to: Annotated[Optional[CalendarDate], Query()] = None,
+    status: Optional[Status] = None,
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=100)] = 20,
 ):
+    if date_from is not None and date_to is not None and date_from > date_to:
+        raise RequestValidationError([{"type": "value_error", "loc": ("query", "date_to"),
+                                       "msg": "date_to must be on or after date_from", "input": date_to}])
     q = {}
-    if emp_code:
+    if emp_code is not None:
         q["emp_code"] = emp_code
     if date_from or date_to:
         q["date"] = {}
@@ -139,14 +381,13 @@ def list_attendance(
             q["date"]["$gte"] = date_from
         if date_to:
             q["date"]["$lte"] = date_to
-    if status:
+    if status is not None:
         q["status"] = status
-    docs = list(db.attendance_logs.find(q))
-    docs.sort(key=lambda d: d["date"], reverse=True)
-    total = len(docs)
-    page_docs = docs[(page - 1) * page_size : page * page_size]
-    for d in page_docs:
-        d["id"] = str(d.pop("_id"))
+    total = db.attendance_logs.count_documents(q)
+    cursor = (db.attendance_logs.find(q, {"_id": 0})
+              .sort([("date", -1), ("emp_code", 1)])
+              .skip((page - 1) * page_size).limit(page_size))
+    page_docs = [serialize_attendance(doc) for doc in cursor]
     return {"items": page_docs, "total": total, "page": page, "page_size": page_size}
 
 

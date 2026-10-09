@@ -1,0 +1,124 @@
+{
+  "database": "hrone_p3v_20261009_d6f3c3c699d24d9e",
+  "date_ist": "2026-10-09T21:46:08.562735+05:30",
+  "checks": {
+    "cold_startup": {
+      "status": "PASS",
+      "seconds": 2.485,
+      "limit_seconds": 20,
+      "includes": "process spawn, imports, fresh MongoDB connection, new indexes, bind and health ping"
+    },
+    "health": {
+      "status": "PASS"
+    },
+    "registered_contract": {
+      "status": "PASS"
+    },
+    "employee_concurrency": {
+      "status": "PASS",
+      "statuses": [
+        201,
+        409
+      ],
+      "stored_documents": 1,
+      "dispatch_gap_ms": 0.302
+    },
+    "employee_create_validation_and_storage": {
+      "status": "PASS"
+    },
+    "employee_listing_and_pagination": {
+      "status": "PASS"
+    },
+    "punch_concurrency": {
+      "status": "PASS",
+      "statuses": [
+        201,
+        409
+      ],
+      "stored_documents": 1,
+      "dispatch_gap_ms": 0.344
+    },
+    "punch_validation_dates_and_storage": {
+      "status": "PASS"
+    },
+    "attendance_listing_filters_history_legacy": {
+      "status": "PASS"
+    },
+    "indexes_and_repeated_setup": {
+      "status": "PASS",
+      "indexes": [
+        {
+          "collection": "employees",
+          "name": "employee_code_unique",
+          "keys": [
+            [
+              "emp_code",
+              1
+            ]
+          ],
+          "unique": true
+        },
+        {
+          "collection": "employees",
+          "name": "employee_department_code",
+          "keys": [
+            [
+              "department",
+              1
+            ],
+            [
+              "emp_code",
+              1
+            ]
+          ],
+          "unique": false
+        },
+        {
+          "collection": "attendance_logs",
+          "name": "attendance_employee_date_unique",
+          "keys": [
+            [
+              "emp_code",
+              1
+            ],
+            [
+              "date",
+              1
+            ]
+          ],
+          "unique": true
+        },
+        {
+          "collection": "attendance_logs",
+          "name": "attendance_date_code",
+          "keys": [
+            [
+              "date",
+              -1
+            ],
+            [
+              "emp_code",
+              1
+            ]
+          ],
+          "unique": false
+        }
+      ]
+    },
+    "attendance_db_unchanged": {
+      "status": "PASS",
+      "counts": {
+        "employees": 6,
+        "attendance_logs": 9
+      }
+    }
+  },
+  "http_requests": 46,
+  "status": "PASS",
+  "development_counts_before": {
+    "employees": 6,
+    "attendance_logs": 9
+  },
+  "server_process_stopped": true,
+  "cleanup": "PASS"
+}
