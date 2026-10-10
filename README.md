@@ -1,319 +1,135 @@
 # Employee Attendance & Analytics API
 
-A FastAPI and MongoDB backend for the HROne Software Engineer Trainee assignment. Employees can punch in and out, managers can correct attendance with an audit trail, and MongoDB aggregation reports provide monthly summaries, department totals, late rankings and daily trends. The Admin Explain API exposes real query execution plans for the five contract-supported read operations.
+HROne trainee assignment backend using Python, FastAPI, Pydantic and PyMongo. All application code is in [app/main.py](app/main.py). The service manages employees, attendance, atomic corrections with audit history, four MongoDB analytics reports and five explain targets.
 
-**Status:** Phases 1-7 complete; all 12 APIs implemented. Saved Phase 7 live verification passed 21 checks / 120 HTTP requests, startup 3.92 seconds. Phase 8 benchmark tooling is prepared; 100,000-record performance acceptance remains NOT MEASURED. Phases 9-10 pending.
+**Status:** Phases 1-8 complete; Phase 9 audit completed with qualified submission readiness. **218 offline tests passed, zero failures.** Saved Phase 8 verification passed on 100,000 attendance fixture documents and 1,050 employees, with 111 HTTP requests and successful owned-database cleanup. Phase 10 awaits user review. See [REVIEW.md](REVIEW.md) for the compliance matrix, security review and limitations, and [DECISIONS.md](DECISIONS.md) for the five required concise answers.
 
-## Specification and review documents
+## Setup and running
 
-Read the original candidate-kit documents in this order:
-
-1. [PROBLEM_STATEMENT.docx](PROBLEM_STATEMENT.docx): assignment, evaluation and submission requirements.
-2. [openapi.yaml](openapi.yaml): authoritative HTTP contract and rules R1–R10.
-3. [DATA_MODEL.md](DATA_MODEL.md): MongoDB collections, BSON types and sample document shapes.
-4. [app/main.py](app/main.py): all application code, including startup and index initialization.
-5. [REVIEW.md](REVIEW.md) and [DECISIONS.md](DECISIONS.md): defect analysis, fixes, test evidence and implementation choices. Earlier preparation-only statements in those documents describe historical sessions; the saved live reports below establish subsequent results.
-
-## Technology stack
-
-| Component | Technology |
-|---|---|
-| Runtime | Python 3.11+ |
-| API / server | FastAPI, Uvicorn |
-| Database / driver | MongoDB 6.0+ / PyMongo; assignment grader uses MongoDB 7.0 |
-| Validation / configuration | Pydantic, python-dotenv |
-| Tests | Standard-library unittest, isolated storage/aggregation doubles, HTTP/MongoDB verification harnesses |
-
-Application dependencies are declared in [requirements.txt](requirements.txt). Verification scripts additionally use PyYAML to read the original OpenAPI contract.
-
-## Project structure
-
-```text
-candidate_kit/
-|-- app/
-|   |-- __init__.py
-|   `-- main.py                     # All application code
-|-- sample_data/
-|   |-- employees.json             # Original Extended JSON fixtures
-|   `-- attendance_logs.json
-|-- tests/
-|   |-- test_phase3.py / test_phase4.py / test_phase5.py / test_phase6.py / test_phase7.py
-|   |-- test_final_phase3_verification.py
-|   |-- aggregation_memory.py      # Isolated test interpreter, not MongoDB
-|   |-- phase5_fixtures.py
-|   |-- live_phase3.py
-|   |-- final_phase3_verification.py ... final_phase7_verification.py
-|   `-- phase3_final_results.json ... phase6_final_results.json
-|-- requirements.txt
-|-- sample_seed.py
-|-- PROBLEM_STATEMENT.docx
-|-- openapi.yaml
-|-- DATA_MODEL.md
-|-- REVIEW.md
-|-- DECISIONS.md
-`-- README.md
-```
-
-A local `.env` and `.venv/` are private development files, not submission artifacts.
-
-## Installation and configuration
-
-Run commands from `C:\SDT_candidate_kit\candidate_kit` (the directory containing `requirements.txt`).
-
-### Windows PowerShell
+Prerequisites: Python 3.11+ (verified locally with 3.13.16), MongoDB 6.0+; the original candidate-kit local setup uses MongoDB 7. Run from the directory containing requirements.txt. Runtime dependencies are in [requirements.txt](requirements.txt); PyYAML is needed only for tests/verification. The established test runner is unittest; pytest is not required.
 
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
-# Required only for isolated tests and verification scripts:
 .\.venv\Scripts\python.exe -m pip install PyYAML
 ```
 
-### Linux / macOS
+On Linux/macOS, create the environment with `python3 -m venv .venv`, activate with `source .venv/bin/activate`, then run the same pip commands using `python`.
 
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -r requirements.txt
-python -m pip install PyYAML  # Verification dependency
-```
-
-Create `.env` in this directory; no `.env.example` is currently included. For a local MongoDB instance:
+Set MONGO_URI and MONGO_DB in the environment or a private project-root `.env`. Explicit environment variables take priority. Local defaults are:
 
 ```dotenv
 MONGO_URI=mongodb://localhost:27017
 MONGO_DB=attendance_db
 ```
 
-For Atlas, set `MONGO_URI` to your private driver connection string instead. Do not publish its value. Real environment variables take priority over `.env`. The application defaults to local MongoDB and `attendance_db` when the variables are absent.
+For Atlas, use your private Python driver URI, an existing permitted client IP and a database user authorized for reads/writes and startup index creation. Never publish the URI, password or .env contents. Verification also needs access to its dedicated temporary databases, ownership markers, indexes and cleanup; it performs no permission or network-setting changes. The shared verification harness explicitly loads project-root .env before initializing its parent client and inheriting the same URI into its child.
 
-### MongoDB Atlas
+Activate the environment and use the required assignment command:
 
-Use the existing configured cluster, database user and permitted client IP. For a fresh environment, configure a database user and an IP access-list entry, then obtain the Python driver URI from **Connect ? Drivers**. The user needs access to the intended database and startup index creation; manual integration also requires access to the isolated temporary databases it creates and cleans up. Keep credentials local and configure only the access needed. See the [official Atlas connection instructions](https://www.mongodb.com/docs/atlas/connect-to-database-deployment/).
-
-For local development, the original kit also permits a MongoDB 7 container:
-
-```bash
-docker run -p 27017:27017 mongo:7
-```
-
-No Dockerfile is required or included.
-
-### Original sample setup
-
-`sample_data/` contains the original sample documents; hidden evaluation data is much larger. The kit's optional initial loader is:
-
-```bash
-python sample_seed.py
-```
-
-**Use it only against a disposable database selected through `MONGO_DB`: it deletes existing documents in both collections before loading samples. Do not run it against the existing `attendance_db`.** It is unnecessary for startup or verification; live harnesses create their own fixtures.
-
-## Start the backend
-
-The assignment launch command, from the project directory with the virtual environment activated, is:
-
-```bash
+```powershell
+.\.venv\Scripts\Activate.ps1
 uvicorn app.main:app --port 8000
 ```
 
-Without activation on Windows:
+Startup pings MongoDB, audits duplicate natural keys and creates all seven indexes idempotently. It never repairs or reseeds records. Health readiness must complete within 20 seconds. Swagger UI: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs); generated schema: `/openapi.json`. Try read requests first; Swagger write requests affect the selected MONGO_DB.
 
-```powershell
-.\.venv\Scripts\python.exe -m uvicorn app.main:app --port 8000
-```
+The original kit optionally supports `docker run -p 27017:27017 mongo:7`; no Dockerfile is included. Original [sample data](sample_data/employees.json) and [sample_seed.py](sample_seed.py) are retained. The seed command `python sample_seed.py` deletes existing employee/attendance records before loading samples: use only an intentionally disposable database, never the existing attendance_db. Startup and verification do not require it.
 
-Add `--reload` for local development. Startup pings MongoDB, audits duplicate natural keys and creates indexes idempotently; it does not repair or reseed records. The assignment requires readiness within **20 seconds**. `/health` returns 200 only when MongoDB answers, otherwise 503.
+## API overview
 
-- Swagger UI: http://127.0.0.1:8000/docs
-- ReDoc: http://127.0.0.1:8000/redoc
-- Generated OpenAPI: http://127.0.0.1:8000/openapi.json
-- Readiness: http://127.0.0.1:8000/health
+The authoritative contract is [openapi.yaml](openapi.yaml); BSON shapes and legacy defaults are in [DATA_MODEL.md](DATA_MODEL.md). There are 12 operations across 11 paths.
 
-In Swagger UI, expand an operation and use **Try it out**. Use a dedicated test database for create, punch and correction requests. Query analytics and explain with the parameters below; the original YAML remains authoritative.
-
-## Implemented APIs
-
-| Group | Method | Route | Behavior |
-|---|---|---|---|
-| System | GET | `/health` | MongoDB readiness |
-| Employees | POST | `/employees` | Create employee; 201, duplicate code 409 |
-| Employees | GET | `/employees` | Optional department filter, code-sorted pagination |
-| Attendance | POST | `/attendance/punch-in` | Create employee/day record; 201, duplicate 409 |
-| Attendance | POST | `/attendance/punch-out` | Close selected punch-in and calculate derived fields |
-| Attendance | GET | `/attendance` | Employee/date/status filters; date DESC, code ASC pagination |
-| Attendance | PATCH | `/attendance/{emp_code}/{date}` | Correct existing record and append audit history |
-| Analytics | GET | `/analytics/employees/{emp_code}/monthly` | Employee monthly report |
-| Analytics | GET | `/analytics/departments/summary` | Monthly department totals and headcount |
-| Analytics | GET | `/analytics/leaderboard/late` | Late-minute competition ranking |
-| Analytics | GET | `/analytics/departments/{department}/trend` | Daily calendar series and rolling average |
-| Admin | GET | `/admin/explain/{endpoint}` | Actual MongoDB execution plan |
-
-Missing resources return 404 where specified; conflicting writes return 409; invalid input returns 422 with a `detail` array. MongoDB outages produce sanitized 503 responses.
-
-## Attendance rules and workflows
-
-Employees use immutable, client-supplied `emp_code`; attendance is addressed by `(emp_code, date)`. BSON `_id` is not the public resource identity. API instants are integer epoch milliseconds; MongoDB stores UTC BSON datetimes. Calendar dates/months and shift times remain strings. Legacy missing `history` and `half_day` are read as `[]` and `false`.
-
-| Rule | Summary |
-|---|---|
-| R1 | IST attendance dates/shifts; truncate instants to whole seconds. For overnight shifts (`shift_end <= shift_start`), punches earlier than shift end belong to the previous attendance day; shift end rolls into the next day. |
-| R2 | Late only strictly beyond 10 minutes after shift start. Then floor minutes from shift start, not from the end of grace. |
-| R3 | Overtime is floored minutes beyond shift end, counted only at 30 minutes or more. |
-| R4 | Work hours = elapsed seconds / 3600, rounded half-up to two decimals; null until punch-out. |
-| R5 | Rounded work hours below 4.50 mean half-day; presence weight is 0.5. |
-| R6 | PRESENT, WFH and ON_DUTY count as present; ABSENT and LEAVE do not. |
-| R7 | Working days are Monday–Friday from joining, with no holiday calendar. Monthly/summary presence excludes weekends and pre-join records; weekend logs still contribute to late/overtime totals. |
-| R8 | Reported numbers use half-up rounding: two decimals, or four for rates. |
-| R9 | Headcount includes employees joined by period end, even with no logs. Trend applies joining eligibility separately each day. |
-| R10 | Page starts at 1; page size defaults to 20 and is capped at 100; totals reflect filters. |
-
-**Punch-in:** Supply `emp_code`, optionally `punched_at` and a presence status. The server determines the attendance day and lateness, storing an open record with null work hours and empty history. Unique indexes enforce one employee/day record: simultaneous duplicate requests yield one 201 and one 409.
-
-**Punch-out:** Supply `emp_code` and optionally `punched_at`. The server selects the most recent punch-in at or before that instant. No candidate is 404; an already closed candidate is 409. The end must be later than the start and within 24 hours. An atomic conditional update stores punch-out, hours, overtime and half-day; it preserves punch-in, lateness and history. Simultaneous closures yield one 200 and one 409.
-
-**Correction:** PATCH an existing employee/date with editable `status`, `punch_in` and/or `punch_out`, plus required `reason` and `regularized_by`. Unsupported and derived fields are rejected with 422, as clarified for PATCH; other request models retain their existing extra-field behavior. Corrections cannot move the attendance date; no-op corrections are rejected. ABSENT/LEAVE clear punches and reset calculations.
-
-Punch-out and correction compare the stored snapshot before updating. A stale snapshot returns 409 instead of silently overwriting another request. Correction commits changed fields and exactly one history entry in the same `find_one_and_update`, using `$set` and `$push`. History records `{at, by, reason, changes}` with before/after values for fields that actually changed; prior entries survive. Punch-in/out do not append manual-correction history.
-
-## MongoDB aggregation analytics
-
-All four reports execute MongoDB pipelines and read stored derived values; application Python does not scan attendance collections to calculate reports.
-
-| Report | Parameters | Key behavior |
+| Group | Method / path | Behavior |
 |---|---|---|
-| Employee monthly | Required `emp_code` path and `month=YYYY-MM` query | Joining-date weekday denominator, weighted presence, leave/late/overtime totals; null percentage for zero working days |
-| Department summary | Required `month`; optional exact-case `department` | Eligible employee root preserves zero-log headcount; work-hour average is record-weighted over presence-status, non-null hours, including weekends |
-| Late leaderboard | Required `month`; optional `department`, `limit` (1–50, default 10) | Department filter before `$rank`; ties share competition ranks with gaps. Rank cutoff retains all ties; output is late-total DESC/code ASC |
-| Department trend | Department path; required `from`/`to` | Inclusive 1–92-day calendar, daily headcount, weighted presence, null weekend/zero-headcount rates and seven-row null-ignoring moving average within the requested range |
+| System | GET `/health` | 200 only after MongoDB ping; otherwise 503 |
+| Employees | POST `/employees` | Customer-supplied immutable code; 201, duplicate 409 |
+| Employees | GET `/employees` | Exact department filter; code-ascending pagination |
+| Attendance | POST `/attendance/punch-in` | Presence status, IST attendance date, lateness; 201/409 |
+| Attendance | POST `/attendance/punch-out` | Close latest eligible punch-in; hours/overtime/half-day |
+| Attendance | PATCH `/attendance/{emp_code}/{date}` | Correct supplied fields, recompute values, append audit |
+| Attendance | GET `/attendance` | Employee/date/status filters; date DESC/code ASC pagination |
+| Analytics | GET `/analytics/employees/{emp_code}/monthly` | Weekday/join-date summary and attendance percentage |
+| Analytics | GET `/analytics/departments/summary` | Eligible headcount, including zero-log employees; record-weighted hours |
+| Analytics | GET `/analytics/leaderboard/late` | Competition ranks; department filter before rank; retain cutoff ties |
+| Analytics | GET `/analytics/departments/{department}/trend` | Inclusive 1-92-day calendar and seven-row moving average |
+| Admin | GET `/admin/explain/{endpoint}` | Real executionStats for the same production query |
 
-Monthly and summary `present_days` exclude pre-join logs following the agreed interpretation. Trend `present_count` follows its separate daily status/half-day rules, including weekend records; weekend rates remain null. Weekday gaps with positive headcount produce zero rates. Calendars and windows are generated in MongoDB; explicit decimal arithmetic implements half-up rounding.
+Unknown resources return 404 where specified, conflicting writes 409, validation 422 with a detail array, and driver failures sanitized 503. Pagination defaults to page 1 / size 20, maximum 100, with filtered totals. Internal ObjectIds never identify public resources.
 
-## Admin Explain API
+R1 uses IST dates/overnight shifts and truncated whole-second UTC punches. R2 is strictly >10 minutes late, flooring time since shift start. R3 requires >=30 floored overtime minutes. R4 uses half-up work hours; R5 classifies rounded hours <4.50 as half-day. R6 counts PRESENT/WFH/ON_DUTY. R7 uses weekdays/join-date working days; R8 half-up numbers (two decimals, rates four); R9 includes eligible zero-log employees; R10 bounds pagination. Stored derived fields are authoritative for analytics. Monthly/summary presence excludes pre-join logs under the agreed interpretation; trend's weekend records still count as presence while weekend rates are null.
 
-The endpoint returns `{endpoint, collection, explain}` and runs MongoDB explain with **`executionStats`** verbosity against the same main query/pipeline as the corresponding API, including filters, sorting and pagination.
+Punch-out and correction use atomic snapshot-conditional writes; stale snapshots return 409. PATCH sets changed fields and pushes one audit entry in the same MongoDB operation. History is append-only and records before/after values; punch-in/out create no manual history. PATCH rejects unsupported/derived fields with 422, while other models ignore extras under the global convention. No eligible punch-in at/before punch-out time is 404.
 
-| Allowed target | Parameters |
-|---|---|
-| `attendance_list` | Optional `emp_code`, `date_from`, `date_to`, `status`, `page`, `page_size` |
-| `employee_monthly` | Required `emp_code`, `month` |
-| `department_summary` | Required `month`; optional `department` |
-| `late_leaderboard` | Required `month`; optional `department`, `limit` |
-| `department_trend` | Required `department`, `from`, `to` |
+All analytics run in MongoDB, including calendar generation, grouping, ranking and windows. Department work-hour averages use presence-status records with non-null hours, including weekends. Trend gaps, daily eligibility and moving averages are generated inside the requested range.
 
-Example read request: `/admin/explain/employee_monthly?emp_code=EMP0001&month=2026-07`.
+Explain targets: `attendance_list`, `employee_monthly`, `department_summary`, `late_leaderboard`, `department_trend`. Supply the corresponding endpoint's parameters (trend uses department/from/to; monthly uses emp_code/month). Arbitrary collections, commands and pipelines are unavailable. Planner/execution data is retained; deployment metadata is redacted as approved. See the literal-contract caveats in REVIEW.
 
-Invalid targets, missing required parameters and unsupported query options return 422. Callers cannot select arbitrary collections, commands or pipelines. Planner/execution output and metrics are preserved; deployment metadata is redacted as agreed. BSON-only plan values use Extended JSON. A missing employee can still have a valid empty query plan.
+## Indexes and project layout
 
-The verifier examines nested winning/executed plans, index names, IXSCAN/COLLSCAN and lookup scan counters; rejected candidate scans are distinguished from executed scans. A fixture-scale indexed plan does not prove grader-scale performance.
+| Collection | Index | Keys |
+|---|---|---|
+| employees | employee_code_unique | emp_code ASC, unique |
+| employees | employee_department_code | department ASC, emp_code ASC |
+| employees | employee_joined_department | joined_on ASC, department ASC |
+| employees | employee_department_joined | department ASC, joined_on ASC |
+| attendance_logs | attendance_employee_date_unique | emp_code ASC, date ASC, unique |
+| attendance_logs | attendance_date_code | date DESC, emp_code ASC |
+| attendance_logs | attendance_latest_punch | emp_code ASC, punch_in DESC, date DESC |
 
-## Seven application indexes
+`app/main.py` holds the runtime. `tests/test_phase3.py` through `test_phase8.py` and `test_final_phase3_verification.py` hold offline regressions; `aggregation_memory.py` is a test double, not MongoDB. Phase-specific live harnesses and sanitized saved results are in `tests/`. Original assignment/model/contract/sample files remain at their supplied paths. There are no additional application source modules.
 
-Startup declares these indexes idempotently, in addition to MongoDB's default `_id` indexes:
+## Testing and saved evidence
 
-| Collection | Index | Keys | Purpose |
-|---|---|---|---|
-| employees | `employee_code_unique` | emp_code ASC, unique | Employee identity and joins |
-| employees | `employee_department_code` | department ASC, emp_code ASC | Department-filtered employee listing and lookups |
-| employees | `employee_joined_department` | joined_on ASC, department ASC | Month-end eligibility across departments |
-| employees | `employee_department_joined` | department ASC, joined_on ASC | Department eligibility and daily headcount |
-| attendance_logs | `attendance_employee_date_unique` | emp_code ASC, date ASC, unique | Employee/day identity and employee-scoped reads |
-| attendance_logs | `attendance_date_code` | date DESC, emp_code ASC | Date-range listing and analytics reads |
-| attendance_logs | `attendance_latest_punch` | emp_code ASC, punch_in DESC, date DESC | Latest eligible punch-in selection |
-
-## Automated and live verification
-
-Run isolated tests from the project directory:
+Offline command (no live database operations):
 
 ```powershell
 .\.venv\Scripts\python.exe -B -m unittest discover -s tests -v
 ```
 
-On an activated environment, use `python -B -m unittest discover -s tests -v`. These tests cover validation, serialization, attendance calculations, concurrency, audit history, analytics, explain commands, schemas and harness safety without connecting to Atlas. The isolated aggregation interpreter does not replace real MongoDB verification.
+Current audit: **218 passed, 0 failed**, 17.578 seconds; pip check passed. Isolated doubles do not prove server behavior; saved live reports supply separate evidence.
 
-### Recorded results through Phase 6
+| Phase | Saved PASS checks | HTTP requests | Startup | Report |
+|---|---:|---:|---:|---|
+| 3 | 11 | 46 | 2.485s | [JSON](tests/phase3_final_results.json) |
+| 4 | 16 | 68 | 3.627s | [JSON](tests/phase4_final_results.json) |
+| 5 | 17 | 85 | 2.550s | [JSON](tests/phase5_final_results.json) |
+| 6 | 14 | 62 | 2.579s | [JSON](tests/phase6_final_results.json) |
+| 7 | 20 | 120 | 3.920s | [JSON](tests/phase7_final_results.json) |
+| 8 | 20 | 111 | 2.363s | [JSON](tests/phase8_final_results.json) |
 
-Automated totals are cumulative historical phase results, not separate counts to add together. The automated counts below are the supplied verified suite results; live figures are recorded in the linked reports.
+Phase 5's saved JSON contains 17 PASS entries; the earlier supplied summary said 16. This table uses actual saved entries. Historical automated totals were 58/92/123/144/174 through Phases 3-7; Phase 8 preparation plus environment regression tests brought the current suite to 218.
 
-| Phase | Automated tests passed | Live checks passed | HTTP requests | Cold startup | Live status | Report |
-|---|---:|---:|---:|---:|---|---|
-| 3 | 58 | 11 | 46 | 2.485 s | PASS | [Phase 3](tests/phase3_final_results.json) |
-| 4 | 92 | 16 | 68 | 3.627 s | PASS | [Phase 4](tests/phase4_final_results.json) |
-| 5 | 123 | 16* | 85 | 2.550 s | PASS | [Phase 5](tests/phase5_final_results.json) |
-| 6 | 144 | 14 | 62 | 2.579 s | PASS | [Phase 6](tests/phase6_final_results.json) |
+Phase 8 added exactly 100,000 attendance fixtures and 1,050 employee fixtures to the parent's small probes. Full-data fresh startup/index creation took **3.260s**, then idempotent startup **2.134s**. All five tested explain targets reported indexed access and no collection scans; the trend root used EXPRESS_IXSCAN. Analytics oracles, pagination, two-client races, original attendance_db preservation (6 employees / 9 logs), stopped server and owned temporary cleanup passed.
 
-*Phase 5's supplied summary reports 16 live checks; its saved JSON contains 17 PASS check entries. Both counts are retained here explicitly rather than presenting them as identical evidence.*
+| Read API | Samples | Median ms | Descriptive p95 / max ms |
+|---|---:|---:|---:|
+| health | 5 | 56.94 | 63.99 / 63.99 |
+| employees | 5 | 139.58 | 143.54 / 143.54 |
+| attendance | 5 | 158.54 | 166.50 / 166.50 |
+| monthly | 5 | 64.45 | 68.59 / 68.59 |
+| summary | 5 | 589.14 | 649.54 / 649.54 |
+| leaderboard | 5 | 338.27 | 353.48 / 353.48 |
+| trend | 5 | 3889.79 | 3915.70 / 3915.70 |
 
-Phase 6 verified seven application indexes and all five explain targets. The report records unchanged development data (**6 employees / 9 attendance logs**), stopped test server and temporary database cleanup **PASS**. The four recorded startup measurements are below the assignment's 20-second limit.
+Five-sample p95 equals the maximum and is not statistically representative or a production guarantee. Client/network latency is separate from server explain timing. Trend explain took 4,166ms, with expensive work localized to the attendance/department lookup; a precise nested cause is not established. No speculative optimization was applied. Full plan, write latency and deep-offset evidence is summarized in [REVIEW.md](REVIEW.md#phase-8-saved-performance-evidence).
 
-### Phase 7 isolated QA
+RSS snapshots were 75,833,344 and 77,885,440 bytes; peak memory remains NOT MEASURED. Logical data: 20,245,327 bytes; allocated storage: 5,816,320; indexes: 8,339,456. These measurements describe one benchmark on the user's reported Atlas M0 environment, not every deployment or future available capacity. No numeric API latency or RSS threshold is specified by the assignment.
 
-**174 tests passed, zero failures**: all previous 144 tests plus 30 advanced tests covering five-way races, correction retry/history chains, cross-month/year overnight shifts, generated duration/calendar boundaries, all-route error schemas and modern explain stages. The complete Phase 7 verifier callback was tested with fake storage/HTTP; this does not establish real Atlas concurrency or cleanup.
+### Optional verification tools
 
-The confirmed fix is in the verification classifier: `EXPRESS_IXSCAN` and explicit documented read-index equivalents now count as indexed access; unknown stage names do not. Genuine collection scans and rejected-plan exclusions remain covered. Application code and the seven indexes are unchanged. See [the Phase 7 coverage matrix](REVIEW.md#requirements-to-tests-coverage-matrix) and contract catalog for requirement-level evidence. Saved Phase 7 live startup/concurrency/cleanup passed; 100k acceptance remains **NOT MEASURED**.
+No live rerun was performed in Phase 9. A Phase 3-7 harness can be manually selected using `python -B tests/final_phaseN_verification.py`; it starts an owned server on a dynamic localhost port, verifies PID/database/token, writes only its collision-checked temporary database and checks development snapshots before exact-owner cleanup. Live execution needs separate approval and database permissions.
 
-### Optional manual live reruns
-
-Run only when intentionally verifying against the configured MongoDB deployment:
-
-```powershell
-.\.venv\Scripts\python.exe -B tests/final_phase3_verification.py
-.\.venv\Scripts\python.exe -B tests/final_phase4_verification.py
-.\.venv\Scripts\python.exe -B tests/final_phase5_verification.py
-.\.venv\Scripts\python.exe -B tests/final_phase6_verification.py
-# Phase 7 harness; saved live run passed:
-.\.venv\Scripts\python.exe -B tests/final_phase7_verification.py
-```
-
-Each harness launches an isolated child server on a dynamically bound localhost port and validates its process/database/token identity. Writes target only its fresh, collision-checked, owned temporary database; names are within the Atlas 38-byte limit. The original `attendance_db` is read for before/after snapshots. Cleanup stops the owned server and drops only the temporary database after exact name and ownership-token verification. No harness invokes `sample_seed.py`.
-
-## Development status and limitations
-
-| Phase | Work completed / status |
-|---|---|
-| 1 | Environment and MongoDB Atlas setup — complete |
-| 2 | Original assignment analysis and defect review — complete |
-| 3 | Existing API fixes and verification — complete |
-| 4 | Punch-out, corrections and atomic audit updates — complete |
-| 5 | Four aggregation analytics APIs — complete |
-| 6 | Admin Explain API and live fixture verification — complete |
-| 7 | Advanced QA complete; 174 isolated tests and 21 live checks passed |
-| 8 | Benchmark tooling prepared; 100k live acceptance NOT MEASURED |
-| 9-10 | Pending; not started |
-
-The **100,000-record workload remains unverified**: current live fixtures do not establish throughput, latency, query-plan stability or the grader's IXSCAN/no-COLLSCAN acceptance at that scale. Phase 6's saved trend plan reports `EXPRESS_IXSCAN`, supporting indexes and no collection scan; the historical verifier's literal `IXSCAN` flag was false for that target. Phase 7 fixes this detector using an explicit documented read-index-stage allowlist; the original report is preserved. Overall integration PASS must not be read as large-dataset acceptance. Further performance work remains pending.
-
-There is no authentication or holiday calendar in the assignment. `regularized_by` is free text, not an authenticated identity. Earlier DNS/TLS/startup failures are documented historically in REVIEW.md; the saved later reports show successful live runs. No performance guarantee is inferred from isolated test doubles or small live fixtures.
-
-## Submission requirements
-
-Submit a public Git repository containing `app/main.py`, `requirements.txt`, `REVIEW.md`, `DECISIONS.md` and this README. Keep all application code in `app/main.py` and preserve the required launch command and original contract. Do not include `.env`, credentials, virtual environments, data dumps or a Dockerfile. Retain the original assignment files and sample document shapes; the hidden evaluator uses additional cases and a much larger dataset.
-
-
-## Phase 8: manual 100k benchmark
-
-Preparation only; no live benchmark has been executed. See [performance acceptance and safety details](REVIEW.md#phase-8-performance-acceptance-and-preparation) and [decisions](DECISIONS.md#phase-8-benchmark-decisions). The deterministic fixture has 100,000 attendance documents and 1,050 employees, generated in <=100-document batches. All 12 APIs, five explain targets, pagination, independent analytics probes, two-client races, RSS snapshots and two full-data startup measurements are covered by the manual tool. No numeric latency requirement is invented.
-
-Offline plan (safe, no MongoDB connection):
+Phase 8's default command only prints an offline plan:
 
 ```powershell
 .\.venv\Scripts\python.exe -B tests/final_phase8_verification.py
 ```
 
-**Only after explicit user approval**, inspect tier and total deployment headroom in Atlas UI. Create a local `tests/phase8_capacity.local.json` (do not commit it) containing exactly these fields; replace the available bytes and timestamp with observed values for the same configured deployment:
+**Do not rerun the completed 100k benchmark without separate approval.** An approved future run additionally requires `--approve-100k --capacity-file tests/phase8_capacity.local.json`. The ignored local JSON must contain exactly tier (M0 or FLEX), available_bytes, verified_at (UTC ISO timestamp within 24h), same_deployment=true and source="Atlas UI". Inspect actual deployment-wide headroom first. The 94,281,167-byte budget is advisory, not measured free capacity. The single writer averages 50 documents/sec in <=100-document batches, so loading takes roughly 33 minutes; the advisory execution budget is one hour. Only verified owned data/indexes are modified; exact owner mismatch refuses cleanup. Never remediate a failed cleanup by blindly dropping a database.
 
-```json
-{"tier":"M0","available_bytes":0,"verified_at":"REPLACE_WITH_CURRENT_UTC_ISO_TIMESTAMP","same_deployment":true,"source":"Atlas UI"}
-```
+## Limitations and submission
 
-`FLEX` is also supported. Zero capacity and the placeholder timestamp deliberately fail the gate. The offline plan prints the advisory minimum budget (currently 94,281,167 bytes); actual capacity is not inferred from this estimate. The attestation must be within 24 hours. Recheck Atlas immediately before execution. If capacity is inadequate, do not run or silently shrink the workload. No tier, permission or billing changes are automated.
+There is no authentication, holiday calendar, global payload cap or ingress rate limiting in the assignment. regularized_by is free text. Audit history and leaderboard tie responses can grow; listing limits bound document count, not response bytes. Peak memory, clean-clone MongoDB 7 execution and hidden grader results are unverified. A literal IXSCAN-only checker or strict unredacted-explain checker may differ from the accepted modern-stage/redaction interpretation; these caveats are documented rather than hidden. Changes to pipelines/indexes or production security controls need separate review and approval.
 
-Approved manual live command, from candidate_kit:
-
-```powershell
-.\.venv\Scripts\python.exe -B tests/final_phase8_verification.py --approve-100k --capacity-file tests/phase8_capacity.local.json
-```
-
-Allow roughly 33 minutes for paced attendance insertion, plus tests (advisory one-hour operation budget). One owned temporary database is created and cleaned up after exact ownership verification; `attendance_db` receives no writes. The report is saved as `tests/phase8_final_results.json`. The parent initially creates seven small attendance probes, so total collection counts exceed the exactly-100k benchmark fixture. Failed plans remain evidence for review, not a reason to add speculative hints/indexes. A cleanup failure leaves the exact temporary identity in the sanitized report; investigate ownership read-only before any manual remediation. No 100k live latency, startup, memory or plan result is currently claimed.
-
-Phase 8 offline verification: **211 automated tests passed, zero failures** (174 retained plus 37 Phase 8 tests). The default offline planning command reported zero live inserts and cleanup NOT_NEEDED. Full live execution requires separate user approval and the capacity gate described above.
+Submit the original required runtime and documentation files in a public Git repository: app/main.py, requirements.txt, REVIEW.md, DECISIONS.md and README.md. Preserve the official contract and model, single-file runtime and required launch command. Exclude .env, credentials, virtual environments, private dumps, capacity files, caches and Dockerfiles. Phase 9 did not stage, commit, push, modify the remote or submit anything; Phase 10 is awaiting user review.

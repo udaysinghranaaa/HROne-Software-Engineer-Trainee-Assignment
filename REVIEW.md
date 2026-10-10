@@ -1,391 +1,155 @@
 # REVIEW.md
 
-## Current status: Phase 4 implementation
+## Phase 9 final audit
 
-The earlier BLOCKED results below are historical. The saved `tests/phase3_final_results.json` now records Phase 3 PASS: 11 live checks, 46 HTTP requests, 2.485-second startup, employee and punch-in races passed, six employees/nine attendance logs unchanged, child stopped and owned database cleanup PASS. That file was supplied by the user's successful manual run and was not regenerated during Phase 4.
+**Audit execution: PASS. Submission readiness: PARTIAL.** Source and existing tests were reviewed against the complete original problem statement, OpenAPI and data model. No demonstrated application defect justified a runtime change. All 218 offline tests passed (0 failed) in 17.578 seconds; pip check passed. Application code, dependencies, indexes, official documents, sample data and saved benchmark reports are unchanged. This audit made no MongoDB connection, benchmark rerun, seed execution, commit or push.
 
-Phase 4 adds `POST /attendance/punch-out` and `PATCH /attendance/{emp_code}/{date}`. Punch-out finds the latest punch-in at or before the truncated instant, including overnight records; returns 404 when none exists, 409 for a closed/conflicting record and 422 for equal times or durations over 24 hours. It preserves manual history, status and existing lateness.
+PASS means inspected code plus executed offline evidence, supplemented by saved live evidence where identified. PARTIAL identifies an interpretation or evidence boundary; NOT VERIFIED means no relevant measurement exists. Hidden grader results are not available.
 
-PATCH validates the exact natural-key date, required reason/actor, permitted status and strict bounded millisecond timestamps. Presence requires a punch-in on the original R1 attendance day; absence clears both times. Corrections recalculate R2-R5 and append one `{at, by, reason, changes}` entry containing only actual changes, including derived values. No-op corrections are 422. Missing history/half_day retain their legacy defaults.
+## Original defects and completed fixes
 
-Two source ambiguities were raised before completing the APIs. The user's explicit decisions are: PATCH rejects derived/unsupported fields with 422; existing Phase 3 field-ignore behavior remains. Punch-out before every known punch-in returns 404 under the documented candidate selector. PATCH codes follow the plain-string path schema, not the employee-creation regex.
+Locations refer to the starter's original lines, not current lines. All D01-D27 regression methods below passed in the current suite. Severity is this review's impact classification: High affects integrity, outage handling or scalability; Medium affects validation or output correctness. Saved Phase 3 live checks and later Phase 8 evidence supersede the earlier connectivity-blocked status. Standalone calculations were subsequently exercised by punch-out/correction tests.
 
-Both persistence operations use natural-key/snapshot conditional `find_one_and_update`. A competing change yields 409. PATCH's `$set` and `$push` are one atomic document operation, so corrected fields cannot be saved without their required history entry. No automatic retries, process locks, extra revision fields or transactions are introduced. Previous history and unrelated fields are preserved.
-
-The original four indexes remain; the fifth, `attendance_latest_punch`, supports employee-scoped latest-punch selection. Startup stays idempotent. Whole-second UTC BSON storage, IST dates/overnight shift bounds, 10-minute strict grace, floor minutes, 30-minute overtime, decimal half-up hours and rounded 4.50-hour half-day logic reuse Phase 3 helpers.
-
-Executed isolated verification: `.venv/Scripts/python.exe -B -m unittest discover -s tests -v` ran **86 tests: 86 passed, 0 failed, 0 skipped** (35 original application, 23 original harness, 28 Phase 4). Tests cover real parallel ASGI calls with atomic fake MongoDB writes, competing punch-out/PATCH, exact audits, database failures, legacy records, time boundaries and OpenAPI request/response checks. The old exact route/index assertions now require seven implemented operations and five indexes; their existing contract checks were retained. AST syntax checks passed for application and every test script.
-
-`tests/final_phase4_verification.py` is prepared for manual execution only. It shares the existing harness safety workflow, uses a fresh 35-byte `hrone_p4v_` database, checks collisions and acknowledged ownership, verifies child PID/database/token and its bound localhost port, checks real HTTP races and BSON/audit values, compares development snapshots, then stops its server and cleans up only after exact ownership verification. Phase 4 output uses `tests/phase4_final_results.json`; the Phase 3 evidence file is preserved.
-
-**Phase 4 live verification: NOT EXECUTED.** No Atlas connection, record/index writes, deletes, permission changes or seed execution occurred during this implementation. Original API contract, problem statement and sample/seed files are unchanged. Live MongoDB concurrency, query plans, startup timing with the fifth index and 100k-record performance remain unmeasured. No Phase 5 analytics or Phase 6 admin API was implemented.
-
-Manual command from `candidate_kit`: `.venv/Scripts/python.exe -B tests/final_phase4_verification.py`.
-
-## Historical Phase 2/3 review and verification
-
-List every defect you found in the starter `app/main.py` (helpers and endpoints). For each one:
-
-| # | Where (function / line) | What is wrong | How you'd notice it (test, input, or symptom) | How you fixed it |
+| Defect / severity | Starter location | Problem | Regression evidence | Completed fix / current status |
 |---|---|---|---|---|
-| D01 | `health` (original lines 72-74) | No database ping: an outage falsely reports readiness. | `test_health_ping_and_outage_D01`: healthy mock gives 200; simulated outage gives 503 with sanitized detail. | Added bounded real ping and controlled 503. Isolated tests passed. A subsequent read-only Atlas ping passed; the latest dedicated HTTP verification is BLOCKED at DNS preflight. |
-| D02 | `EmployeeIn` (53-60) | Missing patterns, lengths and real-date validation permit invalid stored employees. | `test_employee_invalid_fields_D02`, `test_employee_required_and_valid_boundaries_D02`: invalid cases 422; valid bounds/defaults 201. | Added exact contract constraints and calendar-date validator. |
-| D03 | `EmployeeIn` (58-59) | No cross-field check permits equal shift times on creation. | `test_equal_shifts_D03`: equal shifts return 422. | Added Pydantic model validator requiring different shifts. |
-| D04 | `create_employee` (79-83) | Check-then-insert has a race; no unique index/duplicate-key handling. Duplicate identities can be created. | `test_employee_duplicate_D04`, `test_employee_concurrency_D04`: unique-index fake yields one 201, remaining request 409, one stored document. | Removed check-then-insert; catch `DuplicateKeyError`; startup declares unique employee index. **PARTIALLY_FIXED operationally:** isolated tests passed; live index creation and live concurrency are BLOCKED. |
-| D05 | `create_employee`, `punch_in` (82,102) | Host-local naive times are interpreted as UTC by PyMongo, corrupting instants. | `test_employee_create_serialization_utc_D05_D06`, `test_ist_date_and_bson_instant_D05_D14`, `test_timestamp_omitted_uses_utc_D05_D12`: exact UTC values, BSON round-trip and frozen UTC clock pass. | Use aware UTC now/conversion; configure timezone-aware PyMongo; interpret legacy naive reads as UTC. |
-| D06 | Employee/attendance responses (85,96,121,150) | Default datetime JSON serialization returns strings instead of integer milliseconds, including history. | `test_employee_create_serialization_utc_D05_D06`, `test_history_legacy_no_mutation_D06_D19_D23`: exact fields/types and nested before/after milliseconds pass. | Added explicit boundary serializers and typed response models. |
-| D07 | `list_employees` (93) | One extra page is skipped, so the six-employee default first page is empty. | `test_employee_first_page_sort_D07_D09`: six first-page employees; page 2/size 2 returns EMP0003/EMP0004. | Offset is now `(page - 1) * page_size`. |
-| D08 | `list_employees` (94) | Unfiltered count makes department pagination totals incorrect. | `test_department_filtered_count_D08`: Sales total 2 with one returned item; identical count/find filters asserted. | Count with the same filter as the listing. |
-| D09 | `list_employees` (95) | Missing sort makes order depend on storage order. | `test_employee_first_page_sort_D07_D09`: reversed fixture still returns employee codes ascending. | MongoDB sorts by `emp_code` before skip/limit. |
-| D10 | List query parameters (89,130-131) | No bounds permit zero/negative pages and oversized pages. | `test_pagination_validation_D10`: invalid values 422; size 100 accepted; distant page empty. | Added query bounds: page >= 1 and page size 1-100. |
-| D11 | `punch_in` (101,113) | Missing employee is dereferenced, producing 500. | `test_unknown_employee_D11`: unknown formatted and unformatted string codes return 404. | Guard employee lookup before shift access. |
-| D12 | `PunchInIn`, `punch_in` (65,102) | Coercion and missing bounds accept seconds, floats, strings, booleans or explicit null. | `test_timestamp_strict_bounds_D12`, `test_timestamp_omitted_uses_utc_D05_D12`: invalid inputs 422; both inclusive bounds accepted; omitted value uses UTC clock. | Strict bounded integer type; default factory supplies omitted timestamp while explicit null remains invalid. |
-| D13 | `PunchInIn` (66) | Free-form status allows absent/leave records with punch times. | `test_presence_statuses_D13`: only PRESENT/WFH/ON_DUTY accepted; invalid variants 422. | Presence-status Literal with documented default. |
-| D14 | `punch_in` (102-103) | Host-local calendar date can differ from the required IST day. | `test_ist_date_and_bson_instant_D05_D14`: UTC July 19 20:00 maps to IST July 20 without changing stored instant. | Attendance date explicitly derived in IST. |
-| D15 | `punch_in` (102,110) | Milliseconds retained, violating whole-second calculation/storage convention. | `test_fractional_truncation_D15`: 09:40:00.900 becomes 09:40:00, lateness 0, stored microseconds 0. | Truncate incoming/current instants before calculation and storage. |
-| D16 | Attendance date/late anchor (35,103,113) | Overnight punch uses current day/start, giving wrong natural key and lateness. | `test_overnight_date_and_late_D16`: 00:30 belongs to previous day and is 150 minutes late; strict 06:00 boundary and seeded equal shifts tested. | Added `attendance_date` and explicit attendance-day anchoring in late calculation. |
-| D17 | `compute_late_minutes` (36-37) | Flooring before comparison incorrectly grants nearly another minute of grace. | `test_grace_boundary_D17`: 09:40:00 -> 0; 09:40:01 -> 10; 10:15:59 -> 45. | Compare elapsed seconds strictly > 600, then floor minutes from shift start. |
-| D18 | `punch_in` (104-118) | Check-then-insert race can create two records for the same employee/day. | `test_punch_defaults_and_duplicate_D18_D19`, `test_punch_concurrency_D18`: duplicate 409; simultaneous overnight punches give [201,409] and one fake record. | Unique natural-key index declared; insert directly and map duplicate key to 409. **PARTIALLY_FIXED operationally:** live unique-index creation and race verification BLOCKED. |
-| D19 | Attendance responses (119,149) | Internal ObjectId is exposed as undocumented public `id`. | `test_punch_defaults_and_duplicate_D18_D19`, `test_history_legacy_no_mutation_D06_D19_D23`: exact ten-field response, no id/_id. | Build an explicit response copy; never generate a public attendance ID. |
-| D20 | `list_attendance` (127-143) | Invalid date/status and reversed ranges silently produce misleading results. | `test_attendance_query_validation_D20`: malformed/impossible dates, invalid status and reversed range return default-shaped 422 detail array. | Calendar/status validation plus cross-query range validation. |
-| D21 | `list_attendance` (144-147) | Materializing the full matching result makes memory/time grow with collection size. | `test_attendance_filters_pagination_D21`: inclusive range, filtered total, cursor skip/limit and one yielded item asserted; fake rejects iteration without a limit. | Count separately; MongoDB sorts/skips/limits before page iteration. 100k benchmark not executed. |
-| D22 | `list_attendance` (145) | Date-only sort misses employee-code tie-break. | `test_attendance_sort_D22`: shuffled records sorted date descending, then code ascending; cursor sort asserted. | Compound MongoDB sort. |
-| D23 | `list_attendance` (148-150) | Legacy missing history/half-day causes required response fields to be absent. | `test_history_legacy_no_mutation_D06_D19_D23`: legacy defaults present; source documents byte-equivalent in memory after serialization. | Normalize response copies to history [], half_day false, and other documented missing/null defaults. |
-| D24 | `compute_work_hours` (41) | Built-in float rounding violates half-up and can affect half-day classification. | `test_half_up_hours_and_half_day_D24`: 54 seconds -> 0.02; 16181 seconds -> 4.49/true; 16182 -> 4.50/false; open record null. | Exact whole-second duration, Decimal ROUND_HALF_UP, half-day helper based on rounded hours. |
-| D25 | `compute_overtime` (46-47) | Under-30-minute overtime counted, overstating overtime. | `test_overtime_threshold_D25`: 5 minutes and 29:59 -> 0; 30:00 -> 30. | Floor elapsed minutes, then apply minimum 30. |
-| D26 | `compute_overtime` (46) | Overnight end anchored to same date, overstating overtime by a day. | `test_overnight_overtime_and_naive_utc_D26`: next-day 06:40 -> 40; aware and naive UTC inputs agree. | Shared `shift_bounds` rolls overnight end forward. Helper now also receives shift start, which is required to distinguish overnight shifts. |
-| D27 | Application startup (original 22-27) | No indexes created: uniqueness and query support absent. | `test_indexes_idempotent_D27`, `test_duplicate_audit_stops_before_index_changes_D27`, lifespan tests: idempotence, both duplicate audits before writes, startup initialization/cleanup, fail-safe outage passed. | Lifespan declares four query/uniqueness indexes, audits natural keys, applies bounded setup and closes client. Four application indexes were subsequently confirmed by a read-only check. Fresh dedicated-database setup/cold timing is currently BLOCKED by DNS. |
+| D01 / High | `health` (original lines 72-74) | No database ping: an outage falsely reports readiness. | [test_health_ping_and_outage_D01](tests/test_phase3.py#L219) | Real bounded MongoDB ping; outage returns sanitized 503. PASS |
+| D02 / Medium | `EmployeeIn` (53-60) | Missing patterns, lengths and real-date validation permit invalid stored employees. | [test_employee_invalid_fields_D02](tests/test_phase3.py#L224) | Exact field constraints and real calendar-date validation. PASS |
+| D03 / Medium | `EmployeeIn` (58-59) | No cross-field check permits equal shift times on creation. | [test_equal_shifts_D03](tests/test_phase3.py#L249) | Reject equal shift start/end. PASS |
+| D04 / High | `create_employee` (79-83) | Check-then-insert has a race; no unique index/duplicate-key handling. Duplicate identities can be created. | [test_employee_duplicate_D04](tests/test_phase3.py#L263) | Unique employee index; insert directly and map duplicate key to 409. PASS |
+| D05 / High | `create_employee`, `punch_in` (82,102) | Host-local naive times are interpreted as UTC by PyMongo, corrupting instants. | [test_employee_create_serialization_utc_D05_D06](tests/test_phase3.py#L252) | Aware UTC writes/reads, correct IST conversion and legacy naive-UTC handling. PASS |
+| D06 / High | Employee/attendance responses (85,96,121,150) | Default datetime JSON serialization returns strings instead of integer milliseconds, including history. | [test_employee_create_serialization_utc_D05_D06](tests/test_phase3.py#L252) | Explicit integer-millisecond serializers, including nested audit times. PASS |
+| D07 / Medium | `list_employees` (93) | One extra page is skipped, so the six-employee default first page is empty. | [test_employee_first_page_sort_D07_D09](tests/test_phase3.py#L275) | Use (page-1)*page_size. PASS |
+| D08 / Medium | `list_employees` (94) | Unfiltered count makes department pagination totals incorrect. | [test_department_filtered_count_D08](tests/test_phase3.py#L288) | Count the same filtered set. PASS |
+| D09 / Medium | `list_employees` (95) | Missing sort makes order depend on storage order. | [test_employee_first_page_sort_D07_D09](tests/test_phase3.py#L275) | Sort by employee code before pagination. PASS |
+| D10 / Medium | List query parameters (89,130-131) | No bounds permit zero/negative pages and oversized pages. | [test_pagination_validation_D10](tests/test_phase3.py#L295) | Validate page >=1 and page_size 1..100. PASS |
+| D11 / Medium | `punch_in` (101,113) | Missing employee is dereferenced, producing 500. | [test_unknown_employee_D11](tests/test_phase3.py#L304) | Return 404 before dereferencing missing employee. PASS |
+| D12 / High | `PunchInIn`, `punch_in` (65,102) | Coercion and missing bounds accept seconds, floats, strings, booleans or explicit null. | [test_timestamp_strict_bounds_D12](tests/test_phase3.py#L308) | Strict bounded millisecond integers with omitted UTC-clock default. PASS |
+| D13 / Medium | `PunchInIn` (66) | Free-form status allows absent/leave records with punch times. | [test_presence_statuses_D13](tests/test_phase3.py#L334) | Only three presence statuses accepted for punch-in. PASS |
+| D14 / Medium | `punch_in` (102-103) | Host-local calendar date can differ from the required IST day. | [test_ist_date_and_bson_instant_D05_D14](tests/test_phase3.py#L343) | Explicit IST calendar date. PASS |
+| D15 / Medium | `punch_in` (102,110) | Milliseconds retained, violating whole-second calculation/storage convention. | [test_fractional_truncation_D15](tests/test_phase3.py#L354) | Truncate whole seconds before calculation/storage/response. PASS |
+| D16 / Medium | Attendance date/late anchor (35,103,113) | Overnight punch uses current day/start, giving wrong natural key and lateness. | [test_overnight_date_and_late_D16](tests/test_phase3.py#L362) | Anchor overnight date/start correctly. PASS |
+| D17 / Medium | `compute_late_minutes` (36-37) | Flooring before comparison incorrectly grants nearly another minute of grace. | [test_grace_boundary_D17](tests/test_phase3.py#L370) | Compare >600 seconds before flooring elapsed minutes. PASS |
+| D18 / High | `punch_in` (104-118) | Check-then-insert race can create two records for the same employee/day. | [test_punch_defaults_and_duplicate_D18_D19](tests/test_phase3.py#L375) | Unique employee/date index; duplicate-key 409. PASS |
+| D19 / Medium | Attendance responses (119,149) | Internal ObjectId is exposed as undocumented public `id`. | [test_punch_defaults_and_duplicate_D18_D19](tests/test_phase3.py#L375) | Exclude internal id fields from public resource responses. PASS |
+| D20 / Medium | `list_attendance` (127-143) | Invalid date/status and reversed ranges silently produce misleading results. | [test_attendance_query_validation_D20](tests/test_phase3.py#L396) | Validate calendar dates, status and reversed bounds. PASS |
+| D21 / High | `list_attendance` (144-147) | Materializing the full matching result makes memory/time grow with collection size. | [test_attendance_filters_pagination_D21](tests/test_phase3.py#L401) | Database count/sort/skip/limit; no collection materialization. PASS |
+| D22 / Medium | `list_attendance` (145) | Date-only sort misses employee-code tie-break. | [test_attendance_sort_D22](tests/test_phase3.py#L416) | Sort date descending then employee code ascending. PASS |
+| D23 / Medium | `list_attendance` (148-150) | Legacy missing history/half-day causes required response fields to be absent. | [test_history_legacy_no_mutation_D06_D19_D23](tests/test_phase3.py#L425) | Response-only legacy defaults; preserve stored documents. PASS |
+| D24 / Medium | `compute_work_hours` (41) | Built-in float rounding violates half-up and can affect half-day classification. | [test_half_up_hours_and_half_day_D24](tests/test_phase3.py#L444) | Decimal half-up work hours; classify rounded half-day threshold. PASS |
+| D25 / Medium | `compute_overtime` (46-47) | Under-30-minute overtime counted, overstating overtime. | [test_overtime_threshold_D25](tests/test_phase3.py#L456) | Floor overtime minutes and require >=30. PASS |
+| D26 / Medium | `compute_overtime` (46) | Overnight end anchored to same date, overstating overtime by a day. | [test_overnight_overtime_and_naive_utc_D26](tests/test_phase3.py#L461) | Compute overnight shift end on next day. PASS |
+| D27 / High | Application startup (original 22-27) | No indexes created: uniqueness and query support absent. | [test_indexes_idempotent_D27](tests/test_phase3.py#L469) | Bounded startup duplicate audit and idempotent index setup. PASS |
 
-Also note anything you looked at and decided was **not** a defect, and why.
+## Official compliance matrix
 
-## Non-defects and contract interpretation
+The authoritative sources are [problem statement](PROBLEM_STATEMENT.docx), [OpenAPI](openapi.yaml) and [stored data model](DATA_MODEL.md). Code/test links below identify current definitions.
 
-- `load_dotenv()` preserves real environment-variable priority by default; retained.
-- Synchronous PyMongo with synchronous FastAPI routes is appropriate; retained.
-- Employee shift defaults and punch-in open-record defaults were correct; retained and tested.
-- Inclusive `$gte`/`$lte` date filters were correct; retained and tested.
-- Derived request fields must be ignored under the global contract; default Pydantic extra-field ignoring is retained and tested, rather than globally forbidding extras.
-- PunchInRequest defines `emp_code` as a plain string. The employee-creation pattern is not imposed on punch-in; unknown codes return 404.
-- Attendance has no public ID. BSON ObjectId remains correct internally.
-- No employee-email uniqueness, joining-date punch restriction, authentication or holiday rule is added.
-- The OpenAPI version emitted by FastAPI differs from the supplied YAML version; the YAML is unchanged, and required route/field behavior is preserved.
-
-## Historical Phase 3 verification and limitations
-
-On 2026-10-09, `.venv/Scripts/python.exe -B -W error -m unittest discover -s tests -v` ran **35 tests: 35 passed, 0 failed, 0 skipped**. These are isolated helper/model/ASGI/lifecycle tests using unique-index-enforcing, thread-safe test doubles. They never connect to Atlas, load `.env`, or write live records. Race tests assert actual HTTP statuses and stored fake document counts. They are not live MongoDB race tests.
-
-Python AST syntax checks passed for application and test scripts. `pip check` reported no broken requirements. The protected contract/data/seed/decisions/requirements files remain unchanged.
-
-Initial Phase 3 live checks were **BLOCKED** by DNS/TLS failures, including `TLSV1_ALERT_INTERNAL_ERROR`. A later read-only retry outside the sandbox succeeded: Atlas ping, six employees, nine attendance logs and all four application indexes were verified. This read-only evidence did not establish real HTTP concurrency or cold startup timing. The latest dedicated verification outcome is recorded below.
-
-`tests/live_phase3.py` is an opt-in read-only/metadata verification script. Its default mode only reads; `--create-indexes` invokes the real startup audit/index routine, repeats setup, checks response schemas, and compares BSON record-content snapshots. It contains no record insert/update/delete operations. It must stop if duplicate keys or a safety concern appears; it must never repair records automatically.
-
-R1-R5 and R10 are covered for the existing routes/shared helpers; R6 presence-status validation is covered. R8 half-up work-hour rounding is covered. Analytics-specific R7/R9 and rate/ranking/window behavior are deferred to Phase 4. The seven pending APIs are still unimplemented, and DECISIONS.md remains unchanged. Actual MongoDB 7.0 integration and 100k-record performance are not executed.
-
-Phase 3 implementation and isolated tests are complete. Final dedicated-database verification is **BLOCKED** as detailed below. Review this draft in your own words before final submission.
-
-## Historical Phase 3 dedicated-database verification - 2026-10-09 (IST)
-
-The command `.venv/Scripts/python.exe -B tests/final_phase3_verification.py` was attempted once inside the sandbox and twice outside it. All three attempts failed at the initial MongoDB ping with `ConfigurationError`, categorized safely as DNS / resolution lifetime expired / timed out. No raw exception text or credentials were printed.
-
-**Actual execution:** 0 HTTP requests; no dedicated database created; no server process launched; no MongoDB record or index writes/deletes; cleanup NOT_NEEDED. Cold startup duration is **NOT MEASURED**, not a passing result. Current live concurrency, five-API integration and fresh-test-database indexes are **BLOCKED**. Existing attendance_db snapshots were not obtained during these failed attempts, so a current before/after content comparison is not claimed.
-
-The new verification harness is prepared, not live-validated. It generates a unique `hrone_phase3_verify_YYYYMMDD_<16-hex>` database; refuses existing/generated-name collisions; writes an ownership marker; injects that exact name through MONGO_DB into a fresh child process; verifies the ready marker's PID/database/token before HTTP requests; synchronizes two client threads for each race; validates JSON responses against the original OpenAPI; checks stored BSON data, legacy/history serialization, pagination and indexes; then stops only its process and drops only its database after rechecking the exact name and ownership marker. No production/development seed script is used.
-
-35 isolated tests were re-executed: **35 passed, 0 failed, 0 skipped**. Additional harness checks passed: valid database identity plus four unsafe-identity refusal cases; valid response schema plus two invalid-response refusal cases; all application/test AST syntax checks. These local checks do not substitute for the blocked HTTP/MongoDB run.
-
-Results are saved in `tests/phase3_final_results.json`. PASS below means the applicable implementation/helper evidence passed; PARTIAL means isolated evidence passed but the requested current HTTP/MongoDB verification is blocked. No failure in application behavior was established by the connection preflight failure.
-
-| Defect | Fix implementation | Isolated result | Latest live integration | Final status |
-|---|---|---|---|---|
-| D01 | Bounded ping and controlled 503 | PASS | Prior read-only ping PASS; dedicated HTTP check BLOCKED | PARTIAL |
-| D02 | Employee field/calendar constraints | PASS | Invalid/valid employee HTTP checks BLOCKED | PARTIAL |
-| D03 | Different-shift validator | PASS | Equal-shift HTTP check BLOCKED | PARTIAL |
-| D04 | Unique employee index and duplicate-key 409 | PASS | Prior index existence PASS; real simultaneous HTTP creates BLOCKED | PARTIAL |
-| D05 | UTC creation/punch storage, aware reads | PASS | Dedicated stored-value checks BLOCKED | PARTIAL |
-| D06 | Top-level/nested epoch serializers | PASS | Dedicated HTTP/BSON comparison BLOCKED | PARTIAL |
-| D07 | Correct employee offset | PASS | Dedicated employee pagination BLOCKED | PARTIAL |
-| D08 | Filtered employee count | PASS | Dedicated department totals BLOCKED | PARTIAL |
-| D09 | Employee-code DB sort | PASS | Dedicated sorted listing BLOCKED | PARTIAL |
-| D10 | List pagination bounds | PASS | Dedicated invalid-query HTTP checks BLOCKED | PARTIAL |
-| D11 | Missing-employee 404 guard | PASS | Dedicated unknown-employee HTTP check BLOCKED | PARTIAL |
-| D12 | Strict bounded timestamps and omitted default | PASS | Dedicated timestamp HTTP checks BLOCKED | PARTIAL |
-| D13 | Presence-status enum | PASS | Dedicated status HTTP checks BLOCKED | PARTIAL |
-| D14 | Explicit IST attendance date | PASS | Dedicated instant/date checks BLOCKED | PARTIAL |
-| D15 | Whole-second truncation | PASS | Dedicated stored/returned truncation BLOCKED | PARTIAL |
-| D16 | Overnight attendance-date/start anchor | PASS | Dedicated overnight HTTP check BLOCKED | PARTIAL |
-| D17 | Strict seconds threshold before minute floor | PASS | Dedicated grace-boundary HTTP check BLOCKED | PARTIAL |
-| D18 | Unique attendance key and duplicate-key 409 | PASS | Prior index existence PASS; real simultaneous punches BLOCKED | PARTIAL |
-| D19 | Exclude public id/_id | PASS | Dedicated exact-field checks BLOCKED | PARTIAL |
-| D20 | Date/status/range validation | PASS | Dedicated invalid-filter HTTP checks BLOCKED | PARTIAL |
-| D21 | DB count/sort/skip/limit | PASS | Dedicated pagination BLOCKED; 100k benchmark NOT EXECUTED | PARTIAL |
-| D22 | Date-descending/code-ascending DB sort | PASS | Dedicated tie-order checks BLOCKED | PARTIAL |
-| D23 | Response-only legacy defaults | PASS | Dedicated legacy/BSON preservation BLOCKED | PARTIAL |
-| D24 | Decimal half-up and rounded half-day helper | PASS | N/A: standalone helper; no punch-out API in this phase | PASS |
-| D25 | Minimum 30 whole overtime minutes | PASS | N/A: standalone helper; no punch-out API in this phase | PASS |
-| D26 | Next-day overnight shift end | PASS | N/A: standalone helper; no punch-out API in this phase | PASS |
-| D27 | Startup audit and idempotent indexes | PASS | Prior four-index existence PASS; fresh startup/timing BLOCKED | PARTIAL |
-
-Phase 4 was not started. Complete the prepared dedicated verification where Atlas DNS/network access works before final Phase 3 verification sign-off. No application code, credentials, Atlas settings, original contract, problem statement or existing development records were changed by this final verification task.
-
-## Current Phase 5 verification - 2026-10-10 (IST)
-
-This section supersedes the historical phase-status statements above. The saved `tests/phase4_final_results.json` records PASS for 16 checks, 68 HTTP requests, 3.627-second cold startup, five indexes, unchanged development data (6 employees/9 attendance logs), stopped child and successful owned-database cleanup. Those results are from the previous manual run, not a Phase 5 run.
-
-Four GET analytics operations are implemented in `app/main.py` against the unchanged original YAML:
-
-| API | MongoDB design and verified isolated behavior |
-|---|---|
-| Employee monthly | Employee anchor and bounded grouped attendance lookup; database calendar counts weekday working days from joining; weekday presence excludes pre-join logs; legacy half-day defaults, zero months, leap months and null zero-denominator percentage covered. |
-| Department summary | Eligible employees anchor zero-log headcount; grouped monthly lookups feed department totals; record-weighted presence-status/non-null-hours average, weekday presence, joining eligibility and sorted/exact department filters covered. |
-| Late leaderboard | Month/positive-late match, employee grouping/join, department filtering before rank, competition ranking and rank cutoff; all ties at cutoff retained, orphan codes excluded, deterministic code ordering covered. |
-| Department trend | Database calendar with inclusive 1-92 dates, bounded daily headcount/attendance lookups, null weekend/zero-headcount rates, zero weekday gaps and seven-row null-ignoring window; changing headcount and requested-range-only window covered. |
-
-R7 clarification: exclude pre-join records from monthly and department present_days. Other metrics retain their stated contract filters. Trend present_count follows its separate daily status/half-day rule, including weekend records; weekends still have null attendance_rate. Stored late/overtime/hours are read without recalculation or audit changes. Explicit decimal half-up replaces MongoDB ties-to-even rounding: two decimal places for hours/percentages, four for rates/windows. Legacy missing half_day is false and missing minute totals are zero.
-
-Seven application indexes are declared. The five existing definitions are preserved. Phase 5 adds `employee_joined_department` (joined_on, department) for global month eligibility and `employee_department_joined` (department, joined_on) for daily department headcount. Attendance lookups reuse existing natural-key/date indexes. Index creation remains idempotent; no analytics reports execute at startup. Actual plans, large-dataset performance and seven-index cold startup are not measured yet.
-
-Executed: `.venv/Scripts/python.exe -B -m unittest discover -s tests -v`: **123 passed, 0 failed** (92 prior tests plus 31 Phase 5 tests). The new tests execute production pipelines in a strict test-only aggregation interpreter and compare responses with independently calculated fixture expectations. They cover half-up ties, missing fields, zeros, rank ties/limits, dates, ranges, query validation, exact YAML response schemas, registered operations, ownership rejection, test database naming and the complete Phase 5 callback using fake storage/HTTP. Existing Phase 3/4 regression tests pass; route/index-count assertions were extended for the new operations/indexes while preserving old definitions.
-
-These are isolated tests, not MongoDB server integration. The interpreter is not a replacement for MongoDB and does not establish real server operator compatibility, query plans, Decimal128 extreme-value behavior, HTTP concurrency or startup timing. Live verification remains **NOT EXECUTED**; no Phase 5 PASS artifact is fabricated. The prepared manual harness uses independent expectations and BSON snapshots on its strictly owned temporary database, sharing child PID/database/token/port checks, name length validation, collision checks and exact ownership-token cleanup protection. It does not use the development seed script.
-
-Final quality checks passed: AST syntax validation for 11 Python files; imports and route/schema assertions exercised by the isolated suite; `pip check` (no broken requirements); `git diff --check`; additional whitespace checks for new files; credential-URI exposure checks; six SHA-256 comparisons confirming the original contract, problem statement, data model, seed script and sample datasets are unchanged. No Phase 5 live result file exists. Git emitted only Windows line-ending normalization notices.
-
-No live database operations were performed during Phase 5 implementation or isolated testing. Existing development data, Atlas settings, original assignment/contract/model and sample datasets were not modified. No Phase 6 endpoint, Dockerfile or Git push was added. Run the manual command in README to obtain live evidence before Phase 5 integration sign-off.
-
-## Current Phase 6 verification - 2026-10-10 (IST)
-
-This section supersedes earlier preparation-only statements. Saved Phase 5 evidence (`tests/phase5_final_results.json`) records PASS: 16 checks, 85 HTTP requests, 2.55-second startup, seven application indexes, original development counts 6 employees/9 logs unchanged, stopped child and owned-database cleanup PASS. That run predates Phase 6 and is not a Phase 6 timing measurement.
-
-Implemented `GET /admin/explain/{endpoint}`, operationId `explainEndpoint`. Exact supported targets and query/index relationships:
-
-| Target | Collection / shared query | Inputs / supporting indexes |
-|---|---|---|
-| attendance_list | attendance_logs; exact main find, projection, date DESC/code ASC, skip/limit; count is separate | Optional employee/date range/status, page/size; employee/date unique or date/code |
-| employee_monthly | employees; unchanged monthly pipeline and attendance lookup | Required emp_code/month; employee code unique, attendance employee/date |
-| department_summary | employees; unchanged eligible-employee root with grouped lookup | Required month, optional department; joined/department or department/joined/code, attendance employee/date |
-| late_leaderboard | attendance_logs; unchanged monthly grouping/join/ranking | Required month, optional department/limit; attendance date/code, employee code unique |
-| department_trend | employees; unchanged calendar/headcount/attendance/window pipeline | Required department/from/to; department/joined/code, attendance date/code and employee code unique |
-
-The endpoint issues only a built-in find or aggregate wrapped in real MongoDB explain with executionStats. The shared connection is reused. It returns exactly endpoint, collection and explain; no synthetic stages, counts or extra public summary fields. The user explicitly approved recursive removal of deployment metadata while preserving raw plan and execution information. Extended JSON accommodates BSON values. Unsupported query options are rejected, string filter values remain literals, write/collection/pipeline selection is unavailable and driver failures return sanitized 503 detail. Target-specific missing parameters and invalid inputs return original-shaped 422. Explain of an empty/missing resource is valid and does not invent a 404.
-
-Seven existing indexes and startup behavior are preserved. No new index, hint, background task or initialization query was added. An IXSCAN nested in a winning FETCH/SORT/shard/OR/SUBPLAN/SBE plan counts; a rejected COLLSCAN does not mean the query executed it. Executed lookup collectionScans also matter. The live verifier records per-node keys/docs examined, nReturned and execution time where supplied, avoiding double-counting nested totals. Actual query plans and 100k-record scan/performance acceptance have not been measured in Phase 6. Tiny-fixture scan findings are explicitly separate from that acceptance criterion.
-
-Executed final command: `.venv/Scripts/python.exe -B -m unittest discover -s tests -v`: **144 passed, 0 failed** (123 previous tests and 21 Phase 6 tests). Tests cover exact route/operation/enum/query/response schema, conditional required fields, all production command shapes, executionStats verbosity, defaults/pagination, strict validation and injection refusal, nested winning/executed scan extraction, lookup metrics, empty-resource behavior, BSON conversion, approved metadata redaction, sanitized outages, idempotent existing indexes, phase-specific naming/ownership refusal, and the complete live callback using fake owned storage/HTTP. Previous route and phase-limit assertions were extended for the newly authorized Phase 6 scope; prior endpoint behavior assertions remain.
-
-`tests/final_phase6_verification.py` is manual-only and **NOT EXECUTED against Atlas**. It uses a collision-protected owned 35-byte hrone_p6v_ name, deterministic fixtures, the existing Windows interpreter/environment/child PID/database/token/bound-port checks, before/after BSON snapshots and exact-token cleanup protections. It compares HTTP plans with a direct server explain of the same command, checks observed index declarations and records fixture scan findings plus unmeasured scale acceptance. Original attendance_db is read only for content snapshots; fixture writes and cleanup target only the verified temporary database. No Phase 6 results file is manufactured.
-
-Final static verification passed: syntax checks for 13 Python files; imports/route/schema checks exercised in the suite; pip check with no broken requirements; git diff --check; new-file whitespace checks; credential-URI exposure checks; and six SHA-256 comparisons against the original protected files. The final 144-test suite completed in 8.177 seconds. No live Phase 6 result artifact exists. Git's only notices concern Windows line-ending normalization.
-
-No live MongoDB operations were performed in this implementation session. No original assignment, contract, data model, sample datasets, seed script, credentials or Atlas settings were changed. No seed execution, Dockerfile, push or Phase 7-10 work occurred. The final manual command is in README; obtain live evidence before integration sign-off.
-
-
-## Phase 7 audit and regression hardening - 2026-10-10 (IST)
-
-**Scope:** advanced isolated boundary/contract/concurrency QA and a prepared manual live harness. No application rewrite or Phase 8 load generation. Before coding, the audit identified coverage gaps in five-client races, retries after contention, year/month overnight transitions, generated analytics calendar boundaries and cross-route error schemas. Existing tests already covered ordinary calculations, legacy BSON/history, filters/defaults, two-client races, ranking and windows. The saved Phase 6 EXPRESS_IXSCAN false-negative was the confirmed verifier defect.
-
-### Requirements-to-tests coverage matrix
-
-PASS below means executed isolated evidence. PARTIAL means prior Phase 3-6 live evidence exists, but the expanded Phase 7 live checks remain NOT TESTED. No current requirement is marked BLOCKED by connectivity because no Atlas run was attempted. Performance at 100k records is NOT TESTED, not PASS.
-
-| API / operation ID | Existing tests | Phase 7 additional coverage | Isolated / expanded live |
+| Requirement | Code | Executed regression evidence | Conclusion |
 |---|---|---|---|
-| GET /health / health | Phase3 D01, lifecycle tests | all_twelve_routes_driver_failures_match_error_schema | PASS / NOT TESTED |
-| POST /employees / createEmployee | Phase3 D02-D06, D04 concurrency | missing_body_and_each_required_employee_field; employee_min_max_and_extra_fields_preserve_defaults; wrong_scalar_types_for_each_employee_and_correction_field; five_way_duplicate_employee_creation | PASS / NOT TESTED |
-| GET /employees / listEmployees | Phase3 D07-D10 | absence_records_not_punch_out_candidates_and_missing_filters; all-route errors | PASS / NOT TESTED |
-| POST /attendance/punch-in / punchIn | Phase3 D11-D19 | epoch_min_max_type_and_bounds_matrix; grace_floor_generated_second_matrix; cross_month_year_overnight_exact_shift_end_boundaries; five_way_punch_in_and_punch_out | PASS / NOT TESTED |
-| GET /attendance / listAttendance | Phase3 D20-D23 | empty unknown-code filter; all-route errors; exact schema catalog | PASS / NOT TESTED |
-| POST /attendance/punch-out / punchOut | Phase4 punch-out tests | duration_half_day_overtime_generated_matrix; five-way races; cross-year/month/leap transitions; absence candidate exclusion | PASS / NOT TESTED |
-| PATCH /attendance/{emp_code}/{date} / regularizeAttendance | Phase4 correction, snapshot and audit tests | five_way_corrections_one_history_and_retry_chain; patch_punch_out_race_retry_preserves_both_changes; all_status_transition_matrix_and_rejected_audits_unchanged; rejected_corrections_no_partial_storage_or_history | PASS / NOT TESTED |
-| GET employee monthly / employeeMonthly | Phase5 monthly/oracle tests | join_date_calendar_generated_month_matrix (first/middle/last/future across leap/non-leap months) | PASS / NOT TESTED |
-| GET department summary / departmentSummary | Phase5 summary/oracle tests | summary_zero_log_legacy_defaults_and_response_order; unknown department empty result | PASS / NOT TESTED |
-| GET late leaderboard / lateLeaderboard | Phase5 rank/tie/orphan/filter tests | all_tied_rank_cutoffs_more_rows_than_limit (five ties, limits 1/2/5/50) | PASS / NOT TESTED |
-| GET department trend / departmentTrend | Phase5 calendar/window/range tests | trend_cross_month_year_and_leap_day_oracles; one-day range | PASS / NOT TESTED |
-| GET admin explain / explainEndpoint | Phase6 command/schema/redaction/parser tests | saved_express_stage_regression_without_changing_report; modern_indexed_allowlist_and_unknown_stages_not_indexed; nested_express_rejected_candidates_and_lookup_scans | PASS / NOT TESTED |
+| `GET /health` | [health](app/main.py#L428) | [test_health_ping_and_outage_D01](tests/test_phase3.py#L219); saved Phase 8 HTTP validation | PASS operation; explain caveats below |
+| `POST /employees` | [create_employee](app/main.py#L441) | [test_employee_concurrency_D04](tests/test_phase3.py#L268); saved Phase 8 HTTP validation | PASS operation; explain caveats below |
+| `GET /employees` | [list_employees](app/main.py#L452) | [test_department_filtered_count_D08](tests/test_phase3.py#L288); saved Phase 8 HTTP validation | PASS operation; explain caveats below |
+| `POST /attendance/punch-in` | [punch_in](app/main.py#L467) | [test_punch_concurrency_D18](tests/test_phase3.py#L387); saved Phase 8 HTTP validation | PASS operation; explain caveats below |
+| `GET /attendance` | [list_attendance](app/main.py#L513) | [test_attendance_filters_pagination_D21](tests/test_phase3.py#L401); saved Phase 8 HTTP validation | PASS operation; explain caveats below |
+| `POST /attendance/punch-out` | [punch_out](app/main.py#L534) | [test_punch_out_real_parallel_asgi_atomicity](tests/test_phase4.py#L167); saved Phase 8 HTTP validation | PASS operation; explain caveats below |
+| `PATCH /attendance/{emp_code}/{date}` | [regularize_attendance](app/main.py#L561) | [test_correction_multiple_fields_derived_and_utc_audit](tests/test_phase4.py#L183); saved Phase 8 HTTP validation | PASS operation; explain caveats below |
+| `GET /analytics/employees/{emp_code}/monthly` | [employee_monthly](app/main.py#L744) | [test_join_date_calendar_generated_month_matrix](tests/test_phase7.py#L312); saved Phase 8 HTTP validation | PASS operation; explain caveats below |
+| `GET /analytics/departments/summary` | [department_summary](app/main.py#L752) | [test_summary_zero_log_legacy_defaults_and_response_order](tests/test_phase7.py#L336); saved Phase 8 HTTP validation | PASS operation; explain caveats below |
+| `GET /analytics/leaderboard/late` | [late_leaderboard](app/main.py#L757) | [test_all_tied_rank_cutoffs_more_rows_than_limit](tests/test_phase7.py#L327); saved Phase 8 HTTP validation | PASS operation; explain caveats below |
+| `GET /analytics/departments/{department}/trend` | [department_trend](app/main.py#L764) | [test_trend_cross_month_year_and_leap_day_oracles](tests/test_phase7.py#L321); saved Phase 8 HTTP validation | PASS operation; explain caveats below |
+| `GET /admin/explain/{endpoint}` | [explain_endpoint](app/main.py#L840) | [test_five_commands_and_verbosity_reuse_production_builders](tests/test_phase6.py#L45); saved Phase 8 HTTP validation | PASS operation; explain caveats below |
+| All 12 methods, paths, operation IDs, statuses, request required/optional fields | [EmployeeIn](app/main.py#L284) | [test_all_twelve_operation_ids_statuses_and_request_schema_fields](tests/test_phase7.py#L79) | PASS |
+| Exact response fields/types, nested epochs and legacy defaults | [serialize_attendance](app/main.py#L180) | [test_history_legacy_no_mutation_D06_D19_D23](tests/test_phase3.py#L425) | PASS; test_phase7 checked_http validates YAML success/error schemas |
+| Validation 422, unknown-resource 404, conflict 409, safe outage 503 | [attendance_validation_error](app/main.py#L328) | [test_all_twelve_routes_driver_failures_match_error_schema](tests/test_phase7.py#L264) | PASS; Phase 4 invalid/no-op/resource tests cover domain errors |
+| R1 UTC/IST, second truncation and overnight date | [attendance_date](app/main.py#L132) | [test_cross_month_year_overnight_exact_shift_end_boundaries](tests/test_phase7.py#L137) | PASS |
+| R2 strict >10-minute grace and floor since shift start | [compute_late_minutes](app/main.py#L149) | [test_grace_floor_generated_second_matrix](tests/test_phase7.py#L127) | PASS |
+| R3 >=30 whole overtime minutes, next-day overnight end | [compute_overtime](app/main.py#L169) | [test_overnight_overtime_and_naive_utc_D26](tests/test_phase3.py#L461) | PASS; D25 threshold and Phase 4 boundaries retained |
+| R4 half-up work hours; R5 rounded <4.50 half-day | [compute_work_hours](app/main.py#L157) | [test_duration_half_day_overtime_generated_matrix](tests/test_phase7.py#L156) | PASS |
+| R6 presence statuses, absence clears punches | [attendance_calculations](app/main.py#L340) | [test_all_status_transition_matrix_and_rejected_audits_unchanged](tests/test_phase7.py#L232) | PASS |
+| R7 weekdays/join-date working days and presence; weekend totals | [monthly_pipeline](app/main.py#L669) | [test_join_date_calendar_generated_month_matrix](tests/test_phase7.py#L312) | PASS under prior pre-join presence clarification |
+| R8 half-up reports: two decimals, rates four | [mongo_half_up](app/main.py#L629) | [test_monthly_percentage_half_up](tests/test_phase5.py#L114) | PASS |
+| R9 eligible headcount includes zero-log employees | [department_summary_pipeline](app/main.py#L681) | [test_summary_zero_log_legacy_defaults_and_response_order](tests/test_phase7.py#L336) | PASS |
+| R10 defaults 1/20, size <=100, filtered totals, stable DB sorting | [attendance_query](app/main.py#L492) | [test_pagination_validation_D10](tests/test_phase3.py#L295) | PASS; saved Phase 8 pagination/plans add full-data evidence |
+| MongoDB analytics, gap-filled 1..92 days, in-range seven-day window | [trend_pipeline](app/main.py#L714) | [test_trend_cross_month_year_and_leap_day_oracles](tests/test_phase7.py#L321) | PASS; no application full-collection analytics loops |
+| Unique keys, atomic updates and append-only correction history | [attendance_snapshot_filter](app/main.py#L351) | [test_five_way_corrections_one_history_and_retry_chain](tests/test_phase7.py#L195) | PASS; saved Phase 7/8 live race evidence |
+| Seven startup indexes, duplicate audit, idempotent initialization | [ensure_indexes](app/main.py#L60) | [test_indexes_idempotent_D27](tests/test_phase3.py#L469) | PASS; saved full-data startup 3.260s / 2.134s |
+| Readiness <20s including full-data index setup; client closed | [lifespan](app/main.py#L78) | [test_lifespan_index_setup_and_cleanup_D27](tests/test_phase3.py#L489) | PASS on saved environment; future deployments unverified |
+| Environment priority, parent/child URI and owned DB identity | [connect_database](app/main.py#L50) | [test_child_inherits_loaded_parent_uri_and_owned_database](tests/test_final_phase3_verification.py#L46) | PASS; explicit shared project-root loader tests and app non-overriding dotenv |
+| All application code in app/main.py; required uvicorn launch | [lifespan](app/main.py#L78) | [test_only_implemented_routes_and_contract_schemas](tests/test_phase3.py#L536) | PASS source inspection; runtime imports/routes exercised offline |
+| Raw explain plus same production query and executionStats | [explain_json](app/main.py#L824) | [test_output_preserves_raw_plans_metrics_and_redacts_metadata](tests/test_phase6.py#L115) | PARTIAL literal raw output: user-approved deployment metadata redaction retained |
+| 100k indexed plans, no executed COLLSCAN, including nested lookups | [explain_query](app/main.py#L796) | [test_nested_express_rejected_candidates_and_lookup_scans](tests/test_phase7.py#L369) | PASS semantic indexed access in five tested shapes; PARTIAL literal IXSCAN/grader portability: trend reports EXPRESS_IXSCAN |
+| Hidden grader execution and fresh MongoDB 7 clean-clone runtime | [connect_database](app/main.py#L50) | [test_all_twelve_operation_ids_statuses_and_request_schema_fields](tests/test_phase7.py#L79) | NOT VERIFIED; current installed environment and saved Atlas run do not prove hidden-grader results |
 
-All abbreviated Phase 7 names above refer to `test_...` methods in `tests/test_phase7.py`. Common additions cover all twelve operation IDs/status declarations/request field sets and simulated driver failures, with response validation against the unchanged original YAML. Exact success/error response-field assertions remain in prior tests; every new HTTP helper checks the original response schema. ObjectId resource leakage is rejected; raw explain command expressions may legitimately contain the `_id` field name and are not resource documents.
+### Contract interpretations and grading limits
 
-| Rule / integrity requirement | Boundary evidence | Status |
+Prior explicit user decisions remain: PATCH rejects derived/unsupported fields (global ignore convention remains for other models); no punch-in at/before a requested punch-out means 404; monthly/summary presence excludes pre-join records; explain redacts deployment metadata while preserving plans/counters. These are documented exceptions/interpretations, not edits to the official contract. Trend's daily presence follows its separate rules. A literal grader requiring the exact IXSCAN string, or unredacted metadata, has not been demonstrated to accept these choices. No fabricated stage, hint or redaction bypass was introduced. MongoDB 7 grader compatibility requires its own approved environment or the grader itself; saved modern Atlas plans are not that proof.
+
+## Security and code-quality audit
+
+| Area | Evidence / finding | Status / action |
 |---|---|---|
-| R1 IST/UTC, truncation and overnight date | UTC/IST midnight, naive BSON, fractional milliseconds, month/year/leap-day shift transitions | PASS isolated; new live NOT TESTED |
-| R2 grace and floors | 599/600/601/659/660/3599/3600 seconds and next-calendar-day reset | PASS isolated |
-| R3 overtime | 29:59, 30:00, 30:01; overnight end; prior open-record tests | PASS isolated |
-| R4/R5 hours, half-up, half-day | generated whole-second durations, 4.49/4.50 transition, 24-hour bound and invalid ordering | PASS isolated |
-| R6 statuses and transitions | all three presence statuses to all five statuses, absence-to-presence restoration, invalid combinations | PASS isolated |
-| R7/R9 working days/headcount | first/middle/last/future joining dates, weekday/weekend/zero-log/leap cases, independent calendar oracle | PASS isolated |
-| R8 analytics precision | prior Decimal half-up ties and new stored-value/oracle comparisons | PASS isolated |
-| R10 filtered pagination | prior first/last/empty/bounds tests; shared query schema and defaults preserved | PASS isolated |
-| Five-client creation/punch races | one employee/punch-in 201 and four 409; one punch-out 200 and four 409 | PASS isolated; real Phase7 NOT TESTED |
-| Corrections and cross-operation contention | one forced-snapshot winner, retry chain, prior history unchanged, independent employees | PASS isolated; real Phase7 NOT TESTED |
-| No partial audit write / safe errors | failed/invalid/no-op requests leave BSON unchanged; controlled 503 on all routes | PASS isolated |
-| Unique keys / seven indexes / startup audit | all prior index, duplicate-audit and lifespan tests retained | PASS isolated; prior live PASS |
-| Explain semantic classification | explicit documented read-stage allowlist, genuine COLLSCAN and lookup counters, rejected plans excluded | PASS isolated; prior server evidence reinterpreted only |
-| Large dataset / Phase7 cold startup / cleanup | no live run or 100k generation performed | NOT TESTED |
+| Current tracked secrets/prohibited files | 38 tracked paths checked; no tracked .env, virtual environment, caches, capacity attestation or Dockerfile. URI pattern hit in tests/test_final_phase3_verification.py is a deliberate synthetic diagnostic fixture, not a real credential. No secret values printed. | PASS scoped heuristic review, not a complete history or entropy scan |
+| Environment configuration | app load_dotenv does not override environment; shared harness explicitly loads ROOT/.env before parent/child initialization. Configuration regression tests passed. | PASS; local .env kept private and unchanged |
+| Ignore protection | .env and capacity file were ignored; virtualenv/cache patterns were missing. Added .venv, venv, pytest/ruff caches and coverage artifacts. | PASS hygiene fix; no files staged |
+| Injection / command selection | Typed string filters remain data; server builds operators and collection names. Explain permits five fixed targets, not arbitrary pipelines/commands. See test_phase6 string_values_remain_literals_not_query_operators and arbitrary_command_collection_and_pipeline_rejected. | PASS covered shapes |
+| Validation / safe errors | Strict timestamp integers, schemas, calendar/bounds checks and model-specific extra handling. PyMongoError produces fixed 503; startup and harness diagnostics suppress private driver messages. All-route error tests passed. | PASS; arbitrary corrupt out-of-model seeded records are not supported |
+| Concurrency / consistency | Unique indexes, complete snapshot conditional writes, and single-operation set/push preserve history. Real saved races and isolated forced-snapshot tests agree. | PASS; no unsafe record repair or application deletion endpoint |
+| Data access / resource lifecycle | Listing limit applied before Python serialization; analytics group in MongoDB; trend max 92 rows. Shared client closes on startup failure/shutdown. Harness closes child processes before exact-owner cleanup. | PASS examined paths |
+| Public access / abuse protection | Assignment specifies no auth, role checks, request-size cap or rate limiting. Explain can be expensive; plain-string lookup fields and ignored extras can be large. No holiday calendar; actor is free text. | PARTIAL for deployment hardening; no contract-changing cap/auth added |
+| Response/history size | Pagination bounds document count, not bytes; audit history grows and rank-cutoff ties can return more than limit. Snapshot matching includes history. | PARTIAL resource risk under long-lived workloads; retention/schema changes need approval |
+| Dependencies | Python 3.13.16; established runner is unittest, not pytest (pytest is not installed). pip check passed; PyYAML is a verification-only dependency documented separately. requirements use lower bounds. | PASS installed compatibility; clean-clone install and vulnerability advisory database NOT VERIFIED |
+| Logs / dumps / debug | No application print/debug=True or raw driver error response; no new data dump, .env contents output or database access during audit. Original public sample JSON is intentional kit material. | PASS current scope; Git history and deployed log contents not inspected |
 
-### Confirmed defect and minimal fix
+No additional application defect was reproduced. No application refactor, new module, dependency, index, hint or pipeline change was made. Maintainability remains consistent with the single-file constraint: reusable datetime/serialization/query/pipeline helpers, typed models and explicit atomic writes. Dependency pinning, ingress limits/auth and audit-history lifecycle are optional proposals requiring scope approval, not assignment failure fixes.
 
-`tests/final_phase6_verification.py::inspect_plan` previously tested only `'IXSCAN' in stages`. The saved Phase 6 trend used EXPRESS_IXSCAN and was falsely classified as not indexed. The detector now recognizes the explicit read-stage set IXSCAN, EXPRESS_IXSCAN, CLUSTERED_IXSCAN, EXPRESS_CLUSTERED_IXSCAN and DISTINCT_SCAN. Unknown names, EXPRESS_UPDATE/DELETE, EOF and FETCH do not establish indexed access. Genuine COLLSCAN and positive lookup collectionScans still flag collection scans; rejected candidates remain excluded. Metrics and the raw API output are unchanged. [MongoDB documents modern EXPRESS index stages](https://www.mongodb.com/docs/v8.0/reference/explain-results/).
+## Phase 8 saved performance evidence
 
-`app/main.py`, its query/pipeline builders and index definitions were not changed. Tests found no confirmed additional application defect. Initial new-test failures included fixture-copy wiring and an incorrect lateness expectation after the attendance day changed; those test issues were corrected rather than altering application rules. The saved EXPRESS report is read-only historical evidence, not rewritten to fabricate a new live result. The regression uses a captured sanitized stage/statistics fixture so future manual report reruns cannot make isolated tests nondeterministic.
+Source: [tests/phase8_final_results.json](tests/phase8_final_results.json), unchanged during this audit. Overall PASS, 20 PASS check entries, 111 actual harness HTTP requests; 65 of those have latency observations. Fixture insertion is 100,000 attendance documents plus 1,050 employees; parent/write probes add records, so dbStats reports 101,063 objects across all collections. Original attendance_db BSON snapshot comparison passed (6 employees / 9 logs); both fresh startup children and parent were stopped, owned temporary database cleanup PASS. This is saved evidence, not a new live claim.
 
-### Contract interpretations preserved
+Small parent startup: 2.363s. Full-data fresh startup/index creation: 3.260s; second idempotent startup: 2.134s. All are below 20s. Seven expected index names/key definitions/uniqueness were verified by the harness. Fixture uses five statuses, overnight/gap/half-day/audit examples and zero-log employees; analytics correctness uses a bounded independent 500-record probe plus a zero-log department. It does not exhaust every hidden shape.
 
-- PATCH rejects derived/unsupported fields with 422, retaining the user's prior clarification. Other request models ignore extras under the global convention.
-- A punch-out before every punch-in returns 404 under the selector, retaining the user's prior clarification; equal selected times and >24h duration return 422.
-- Monthly/department present_days exclude pre-join logs; other metrics retain their stated filters. Trend counts daily presence regardless of weekday, while rates are null on weekends.
-- Explain preserves raw planner/execution data with the previously approved deployment-metadata redaction. No new authentication or string-length rules are invented for plain-string lookup parameters.
-- Empty/unknown filtered listings may return empty 200 pages, while missing monthly employees/trend departments return 404. An empty-resource explain can return a valid 200 plan.
-- The assignment's stored-data schema defines allowed types/statuses. Recovery from arbitrarily corrupt, out-of-schema records is not claimed; invalid client inputs and contract-valid legacy missing fields are covered.
+### Client latency (milliseconds)
 
-### Live harness and evidence limits
+Five samples per repeated read; two per write race. p95 is nearest-rank, descriptive only; with five samples it equals the maximum. The explain bucket mixes five different target queries and is not a per-target percentile. Expected 409 conflicts are successful race outcomes, not transport failures. All recorded failure counts are zero.
 
-`tests/final_phase7_verification.py` is prepared for manual execution only. It reuses the proven parent connection/environment, Windows launcher, owned child PID/database/token/port, startup deadline, BSON snapshots and exact ownership-token cleanup checks. The permitted name set adds hrone_p7v_ only (35 UTF-8 bytes); Phase 8 names remain rejected. Previous harness defaults and cleanup checks remain intact. Only existing phase-limit assertions were extended from unsupported phase 7 to unsupported phase 8; prior 144 tests remain.
+| Operation | Samples | Median | p95 | Maximum |
+|---|---:|---:|---:|---:|
+| health | 5 | 56.94 | 63.99 | 63.99 |
+| employees | 5 | 139.58 | 143.54 | 143.54 |
+| attendance | 5 | 158.54 | 166.50 | 166.50 |
+| monthly | 5 | 64.45 | 68.59 | 68.59 |
+| summary | 5 | 589.14 | 649.54 | 649.54 |
+| leaderboard | 5 | 338.27 | 353.48 | 353.48 |
+| trend | 5 | 3889.79 | 3915.70 | 3915.70 |
+| explain | 5 | 173.19 | 4234.62 | 4234.62 |
+| create | 2 | 56.32 | 60.41 | 60.41 |
+| punch_in | 2 | 90.55 | 92.98 | 92.98 |
+| punch_out | 2 | 129.11 | 134.41 | 134.41 |
+| correction | 2 | 123.00 | 123.22 | 123.22 |
+| independent_correction | 2 | 124.80 | 134.05 | 134.05 |
 
-The callback adds actual simultaneous five-client creation/punch-in/punch-out, multiple corrections with audit-chain comparison, correction/punch-out recovery, five independent employee writes, cross-year shifts and half-up boundaries, four analytics oracles and corrected explain classification. Real corrections may serialize and have several valid winners; live expectations count committed successes/history instead of demanding an artificial single snapshot. All fixture writes occur after parent ownership verification in the dedicated DB. No seeder or development-data writes occur. Analytics read snapshots are bounded to fewer than 1000 documents. Cleanup is exclusively the existing verified owner/name path; a failure is reported without blindly retrying deletion.
+### Execution plans and slow trend
 
-The complete callback passed against fake owned storage/ASGI HTTP; this is not Atlas evidence. Phase 7 live requests, startup and cleanup remain NOT TESTED. Prior Phase 3-6 saved reports remain untouched. The seven indexes and original attendance_db remain unchanged. Phase 8 performance evaluation is ready for future work but has not started.
+| Explain target | Observed indexes | Indexed stage / collection scan |
+|---|---|---|
+| attendance_list | `attendance_employee_date_unique` | IXSCAN / none reported |
+| employee_monthly | `attendance_employee_date_unique`, `employee_code_unique` | IXSCAN / none reported |
+| department_summary | `attendance_employee_date_unique`, `employee_department_joined` | IXSCAN / none reported |
+| late_leaderboard | `attendance_date_code`, `employee_code_unique` | IXSCAN / none reported |
+| department_trend | `attendance_date_code`, `employee_department_code`, `employee_department_joined` | EXPRESS_IXSCAN / none reported |
 
-### Exact contract input/output catalog
+Saved first/middle/last/beyond-last pagination and filters passed. At attendance offset 50,000, the plan examined 50,100 keys and 100 documents; offset 99,900 examined 100,000 keys and 100 documents (70ms server execution reported). This supports bounded page transfer but demonstrates linear skip work. Keyset pagination would require a different public contract, so it was not introduced.
 
-The following audit snapshot is derived from the unchanged YAML. Referenced schemas below retain their original property types, bounds and required fields; prose cross-field rules are covered above. Unsupported extras follow the documented model-specific behavior, not a newly invented blanket rejection policy.
+Trend median client latency is 3,889.79ms; saved explain reports executionTimeMillis 4,166. Its employee headcount lookup reports 5,771 keys/docs, 29 returned rows, 24ms cumulative estimate. The attendance lookup reports 31,574 keys/docs, 29 returned rows, 4,165ms cumulative estimate and zero collectionScans. These overlapping metrics are not added. Code in trend_pipeline generates 29 days in the benchmark range; for each day it finds attendance by date, joins each matching code to employees to restrict department, then groups. A following window computes moving averages. Evidence localizes expensive work to the attendance/department lookup subtree; it does not isolate inner join, grouping, cache effects or shared-tier throttling. The summarized report omits detailed nested timings and the server version; neither a precise micro-bottleneck nor a statistically representative production p95 is established.
 
-**GET `/health` / `health`**
+An employee/department-first grouped date-range lookup is an evidence-supported candidate to evaluate because current day-first lookup considers records outside the requested department. It would need to preserve join-date, weekend, gap and rounding rules and be tested on both sparse/dense departments. No index addition, pipeline rewrite, hint or benchmark rerun was performed. Existing indexed access alone does not guarantee low latency. Approval and controlled before/after evidence are required before adopting an optimization.
 
-- Parameters: none.
-- Responses: 200: `status` string (enum=['ok']); 503: `detail` string.
+RSS snapshots: 75,833,344 bytes before and 77,885,440 after; increase 2,052,096 bytes. Peak memory is NOT MEASURED. dbStats: logical data 20,245,327 bytes; allocated storage 5,816,320; index size 8,339,456. These are test-database observations, not Atlas deployment-wide available capacity or long-term memory bounds. The original contract gives no numeric API latency/throughput/RSS thresholds; none were invented.
 
-**POST `/employees` / `createEmployee`**
+## Final verification and submission limits
 
-- Parameters: none.
-- Request body: `emp_code` required: string (pattern=^EMP\d{4,6}$); `name` required: string (minLength=1; maxLength=100); `email` required: string (maxLength=120; pattern=^[^@\s]+@[^@\s]+\.[^@\s]+$); `department` required: string (minLength=1; maxLength=50); `shift_start` optional: string (pattern=^([01]\d|2[0-3]):[0-5]\d$; default=09:30); `shift_end` optional: string (pattern=^([01]\d|2[0-3]):[0-5]\d$; default=18:30); `joined_on` required: string (format=date).
-- Responses: 201: `emp_code` string, `name` string, `email` string, `department` string, `shift_start` string, `shift_end` string, `joined_on` string (format=date), `created_at` EpochMillis; 409: `detail` string; 422: `detail` array.
+Executed offline: `python -B -m unittest discover -s tests -v` (218 PASS / 0 FAIL, 17.578s), pip check, Python AST syntax, all seven saved results JSON parses, relative Markdown file/anchor validation and git diff --check. Original protected-file hashes and application/dependency/report hashes are preserved. All application implementation remains in app/main.py; runtime requires only MongoDB network access. Existing reports retain their original figures (Phase 5 saved JSON has 17 PASS entries, versus the earlier supplied summary of 16).
 
-**GET `/employees` / `listEmployees`**
+Current revision before audit: 90405ff on main. Changed files: .gitignore, README.md, REVIEW.md and DECISIONS.md. No staging, commit, push, remote change or submission. No fresh development snapshot or current connectivity measurement is claimed because no live operations were authorized in Phase 9.
 
-- Parameters: `department` [query, optional]: string; `page` [query, optional]: integer (minimum=1; default=1); `page_size` [query, optional]: integer (minimum=1; maximum=100; default=20).
-- Responses: 200: `items` array, `total` integer, `page` integer, `page_size` integer; 422: `detail` array.
-
-**POST `/attendance/punch-in` / `punchIn`**
-
-- Parameters: none.
-- Request body: `emp_code` required: string; `punched_at` optional: EpochMillis; `status` optional: PresenceStatus (default=PRESENT).
-- Responses: 201: `emp_code` string, `date` string (format=date), `status` Status, `punch_in` EpochMillisNullable, `punch_out` EpochMillisNullable, `work_hours` number or null, `late_minutes` integer, `overtime_minutes` integer, `half_day` boolean, `history` array; 404: `detail` string; 409: `detail` string; 422: `detail` array.
-
-**POST `/attendance/punch-out` / `punchOut`**
-
-- Parameters: none.
-- Request body: `emp_code` required: string; `punched_at` optional: EpochMillis.
-- Responses: 200: `emp_code` string, `date` string (format=date), `status` Status, `punch_in` EpochMillisNullable, `punch_out` EpochMillisNullable, `work_hours` number or null, `late_minutes` integer, `overtime_minutes` integer, `half_day` boolean, `history` array; 404: `detail` string; 409: `detail` string; 422: `detail` array.
-
-**GET `/attendance` / `listAttendance`**
-
-- Parameters: `emp_code` [query, optional]: string; `date_from` [query, optional]: string (format=date); `date_to` [query, optional]: string (format=date); `status` [query, optional]: Status; `page` [query, optional]: integer (minimum=1; default=1); `page_size` [query, optional]: integer (minimum=1; maximum=100; default=20).
-- Responses: 200: `items` array, `total` integer, `page` integer, `page_size` integer; 422: `detail` array.
-
-**PATCH `/attendance/{emp_code}/{date}` / `regularizeAttendance`**
-
-- Parameters: `emp_code` [path, required]: string; `date` [path, required]: string (format=date).
-- Request body: `status` optional: Status; `punch_in` optional: EpochMillis; `punch_out` optional: EpochMillis; `reason` required: string (minLength=5; maxLength=200); `regularized_by` required: string (minLength=1; maxLength=50).
-- Responses: 200: `emp_code` string, `date` string (format=date), `status` Status, `punch_in` EpochMillisNullable, `punch_out` EpochMillisNullable, `work_hours` number or null, `late_minutes` integer, `overtime_minutes` integer, `half_day` boolean, `history` array; 404: `detail` string; 409: `detail` string; 422: `detail` array.
-
-**GET `/analytics/employees/{emp_code}/monthly` / `employeeMonthly`**
-
-- Parameters: `emp_code` [path, required]: string; `month` [query, required]: string (pattern=^\d{4}-(0[1-9]|1[0-2])$).
-- Responses: 200: `emp_code` string, `month` string, `working_days` integer, `present_days` number, `leave_days` integer, `late_count` integer, `total_late_minutes` integer, `total_overtime_minutes` integer, `attendance_pct` number or null; 404: `detail` string; 422: `detail` array.
-
-**GET `/analytics/departments/summary` / `departmentSummary`**
-
-- Parameters: `month` [query, required]: string (pattern=^\d{4}-(0[1-9]|1[0-2])$); `department` [query, optional]: string.
-- Responses: 200: `month` string, `items` array; 422: `detail` array.
-
-**GET `/analytics/leaderboard/late` / `lateLeaderboard`**
-
-- Parameters: `month` [query, required]: string (pattern=^\d{4}-(0[1-9]|1[0-2])$); `limit` [query, optional]: integer (minimum=1; maximum=50; default=10); `department` [query, optional]: string.
-- Responses: 200: `month` string, `items` array; 422: `detail` array.
-
-**GET `/analytics/departments/{department}/trend` / `departmentTrend`**
-
-- Parameters: `department` [path, required]: string; `from` [query, required]: string (format=date); `to` [query, required]: string (format=date).
-- Responses: 200: `department` string, `items` array; 404: `detail` string; 422: `detail` array.
-
-**GET `/admin/explain/{endpoint}` / `explainEndpoint`**
-
-- Parameters: `endpoint` [path, required]: string (enum=['attendance_list', 'employee_monthly', 'department_summary', 'late_leaderboard', 'department_trend']); `emp_code` [query, optional]: string; `month` [query, optional]: string (pattern=^\d{4}-(0[1-9]|1[0-2])$); `department` [query, optional]: string; `limit` [query, optional]: integer (minimum=1; maximum=50; default=10); `date_from` [query, optional]: string (format=date); `date_to` [query, optional]: string (format=date); `status` [query, optional]: Status; `from` [query, optional]: string (format=date); `to` [query, optional]: string (format=date); `page` [query, optional]: integer (minimum=1; default=1); `page_size` [query, optional]: integer (minimum=1; maximum=100; default=20).
-- Responses: 200: `endpoint` string, `collection` string, `explain` object; 422: `detail` array.
-
-### Referenced schema field constraints
-
-These original schema definitions complete the catalog above, including nested response fields. References name other rows; nullable values and conditional/cross-field rules retain the documented contract decisions.
-
-| Schema | Required fields / constraints |
-|---|---|
-| EpochMillis | required: none specified; integer; minimum=100000000000; maximum=4102444800000; format=int64 |
-| EpochMillisNullable | required: none specified; integer or null; minimum=100000000000; maximum=4102444800000; format=int64 |
-| Status | required: none specified; string; enum=['PRESENT', 'ABSENT', 'LEAVE', 'WFH', 'ON_DUTY'] |
-| PresenceStatus | required: none specified; string; enum=['PRESENT', 'WFH', 'ON_DUTY'] |
-| EmployeeCreate | required: emp_code, name, email, department, joined_on; object {emp_code: string; pattern=^EMP\d{4,6}$, name: string; minLength=1; maxLength=100, email: string; maxLength=120; pattern=^[^@\s]+@[^@\s]+\.[^@\s]+$, department: string; minLength=1; maxLength=50, shift_start: string; pattern=^([01]\d\|2[0-3]):[0-5]\d$; default=09:30, shift_end: string; pattern=^([01]\d\|2[0-3]):[0-5]\d$; default=18:30, joined_on: string; format=date} |
-| Employee | required: emp_code, name, email, department, shift_start, shift_end, joined_on, created_at; object {emp_code: string, name: string, email: string, department: string, shift_start: string, shift_end: string, joined_on: string; format=date, created_at: EpochMillis} |
-| EmployeePage | required: items, total, page, page_size; object {items: array of Employee, total: integer, page: integer, page_size: integer} |
-| PunchInRequest | required: emp_code; object {emp_code: string, punched_at: EpochMillis, status: PresenceStatus} |
-| PunchOutRequest | required: emp_code; object {emp_code: string, punched_at: EpochMillis} |
-| RegularizeRequest | required: reason, regularized_by; object {status: Status, punch_in: EpochMillis, punch_out: EpochMillis, reason: string; minLength=5; maxLength=200, regularized_by: string; minLength=1; maxLength=50} |
-| HistoryEntry | required: at, by, reason, changes; object {at: EpochMillis, by: string, reason: string, changes: object} |
-| AttendanceRecord | required: emp_code, date, status, punch_in, punch_out, work_hours, late_minutes, overtime_minutes, half_day, history; object {emp_code: string, date: string; format=date, status: Status, punch_in: EpochMillisNullable, punch_out: EpochMillisNullable, work_hours: number or null, late_minutes: integer, overtime_minutes: integer, half_day: boolean, history: array of HistoryEntry} |
-| AttendancePage | required: items, total, page, page_size; object {items: array of AttendanceRecord, total: integer, page: integer, page_size: integer} |
-| EmployeeMonthly | required: emp_code, month, working_days, present_days, leave_days, late_count, total_late_minutes, total_overtime_minutes, attendance_pct; object {emp_code: string, month: string, working_days: integer, present_days: number, leave_days: integer, late_count: integer, total_late_minutes: integer, total_overtime_minutes: integer, attendance_pct: number or null} |
-| DepartmentSummary | required: month, items; object {month: string, items: array of object {department: string, headcount: integer, present_days: number, avg_work_hours: number or null, late_count: integer, total_late_minutes: integer, leave_count: integer, on_duty_count: integer}} |
-| Leaderboard | required: month, items; object {month: string, items: array of object {rank: integer; minimum=1, emp_code: string, name: string, department: string, total_late_minutes: integer, late_count: integer}} |
-| Trend | required: department, items; object {department: string, items: array of object {date: string; format=date, is_working_day: boolean, headcount: integer, present_count: number, late_count: integer, attendance_rate: number or null, moving_avg_7d: number or null}} |
-
-### Executed Phase 7 results and final checks
-
-Final command `.venv/Scripts/python.exe -B -m unittest discover -s tests -v`: **174 passed, 0 failed, 0 skipped**, in **8.579 seconds** (144 previous tests plus 30 Phase 7 tests). The complete Phase 7 callback was exercised only through fake storage/ASGI HTTP. Syntax checks passed for 15 Python files; imports/routes/response schemas are exercised by the suite; pip check reports no broken requirements; git diff --check and new-file whitespace checks pass; credential-URI checks pass. Six original protected-file hashes, app/main.py and saved Phase 3-6 results are unchanged. No Phase 7 live result artifact exists. No live MongoDB operations, permissions changes, seed execution, push or Phase 8 work occurred.
-
-**Manual command**, from candidate_kit: `.\.venv\Scripts\python.exe -B tests/final_phase7_verification.py`. Integration status is PARTIAL until that new live evidence exists; live Phase 7 checks are NOT TESTED, not PASSED or BLOCKED. No confirmed application FAIL remains and no runtime connectivity BLOCKED status is claimed without an attempted connection.
-
-
-## Phase 8 performance acceptance and preparation
-
-**Status: PARTIAL.** Benchmark tooling and offline safety tests are implemented. The 100k live benchmark was deliberately not executed. No live records were inserted, no development database operations occurred, and cleanup was NOT_NEEDED. Saved Phase 7 evidence now exists: PASS, 21 checks, 120 HTTP requests, startup 3.92s, development unchanged and cleanup PASS. Earlier pending statements above describe the historical preparation state.
-
-### Performance acceptance matrix
-
-| Requirement | Classification | Source / acceptance | Phase 8 evidence |
-|---|---|---|---|
-| About 100,000 attendance documents; fast list and analytics | Explicitly required | Problem sections 7, 9, 10; OpenAPI attendance/explain | Streaming generator yields exactly 100,000; live NOT MEASURED |
-| Python 3.11+, MongoDB 6.0+; grader MongoDB 7.0 | Explicitly required | Problem stack; candidate-kit grader setup | Runtime unchanged; deployment version NOT MEASURED |
-| All indexes created at startup, idempotently, hidden data initially has only _id | Explicitly required | Problem sections 4, 5, 12 | Manual runner recreates seven declared indexes on full test data, then restarts again; live NOT MEASURED |
-| Health ready within 20 seconds | Explicitly required | Problem section 4 | Runner measures spawn, imports, Mongo/index setup, bind and health; asserts <20s; NOT MEASURED at 100k |
-| Five supported explain queries use indexed access with no COLLSCAN | Explicitly required | Problem section 10; OpenAPI Admin Explain | Winning/executed nested plans and lookup scan counters; EXPRESS_IXSCAN retained; live NOT MEASURED |
-| Page size <=100; deterministic sorting; filtered totals | Explicitly required | R10, employee/attendance paths | First/middle/last/beyond and filters implemented; 100k results NOT MEASURED |
-| No full attendance collection loaded into Python; analytics and calendars in MongoDB | Explicitly required | Attendance path; problem section 9 / trend | Application unchanged; bounded fixture batches and independent 500-record probe |
-| Duplicate races and corrections preserve audit history | Explicitly required | Problem sections 4, 9; endpoint contracts | Manual two-client races; prior isolated tests retained; 100k races NOT MEASURED |
-| Specific API p95, throughput, memory ceiling, scan-to-return ratio | Not specified | No numeric thresholds in original contract | Record descriptive samples and per-node counters; no invented acceptance thresholds |
-| Paced single writer, capacity attestation, one-hour execution budget, memory snapshots | Recommended engineering practice | Advisory safety controls, not grading thresholds | Offline gate tests; actual capacity/RSS NOT MEASURED |
-| Mongo usage/speed grading weight | Explicitly stated evaluation condition | Problem section 11: 15%; hidden dataset, no published pass mark | Small-fixture PASS does not establish large-data acceptance |
-
-### Dataset and safe execution design
-
-`tests/phase8_fixtures.py` generates 1,050 unique employees: 1,000 have 100 distinct attendance dates each and 50 have no logs. Seven department names include a five-employee oracle probe and a zero-log department. Dates span January-May 2024 with deterministic gaps and varying join dates/density, all five statuses, UTC BSON timestamps, overnight shifts, late arrivals, overtime, half-days and valid manual status history. No random seed is necessary: generation uses arithmetic only. Natural keys are unique. Batches never exceed 100 documents; the generator never retains 100k full documents. Offline BSON estimate: **20,242,245 bytes**, including generated ObjectIds; advisory headroom budget **94,281,167 bytes** (3x logical BSON plus 32MiB). These are estimates, not measured index or compressed storage sizes.
-
-The reused parent owns a unique 35-byte `hrone_p8v_YYYYMMDD_<16-hex>` database, collision-checks it and acknowledges its exact marker before writes. The exact marker is checked before every batch and index removal. Only declared application indexes in that owned database are removed to measure first-time full-data index creation. Parent cleanup stops its server, verifies exact database/token, drops only its owned database and compares development BSON snapshots. Fresh startup children are stopped in finally blocks. Partial insertion or timeout follows that same cleanup path; ownership mismatch refuses deletion. Existing Phase 3-7 database generation APIs still reject phase=8 unless the new explicit name factory is supplied.
-
-The parent first runs its established small contract checks, then adds exactly 100,000 benchmark attendance documents and 1,050 employees. Consequently total database counts include **seven pre-existing parent attendance probes and three employees**, plus subsequent write probes; the report distinguishes inserted benchmark counts from total dbStats objects. No reduced workload is called 100k acceptance.
-
-### Atlas capacity gate
-
-Actual cluster tier and deployment-wide available storage are **NOT MEASURED**. Per-database dbStats does not prove cluster headroom. Before approved manual execution, inspect the same configured deployment in Atlas UI and supply a fresh (within 24h) capacity attestation. The runner rejects unknown tiers, insufficient headroom, stale timestamps and secret/unexpected fields before connecting. An attestation is an operator statement, not independently verified Atlas telemetry; recheck headroom immediately before execution. No infrastructure changes are performed.
-
-Official [Free cluster limits](https://www.mongodb.com/docs/atlas/reference/free-shared-limitations/) document 512MB total data/index capacity and 100 operations/sec; [Flex limits](https://www.mongodb.com/docs/atlas/reference/flex-limitations/) document 5GB and 500 operations/sec. Shared tiers have resource and aggregation-memory limits. The runner uses one writer, <=100-document batches and advisory average 50 inserted documents/sec (roughly 33 minutes for attendance loading), with paced reads and at most two simultaneous HTTP clients. Shared-tier throttling remains possible. The advisory one-hour budget is checked between bounded operations; network calls and cleanup can extend wall time. Capacity shortage means BLOCKED before insertion: use an explicitly approved separate deployment or a clearly labelled smaller diagnostic; never claim reduced data proves 100k acceptance.
-
-### Measurement and correctness coverage
-
-All 12 API operations have timed manual requests; key reads have five paced samples. Median, nearest-rank p95, maximum, failure count and status distribution describe client/network latency. Five samples do not establish statistically representative p95. Explain counters stay separate per node, avoiding overlapping totals; nested winning stages/indexes and lookup collectionScans are recorded, rejected plans excluded. SORT/FETCH and examined/returned counts are evidence, not automatic failures. First/middle/deep listing plans are additionally recorded. Five explain targets must show indexed access and no collection scans before overall PASS. No plan or latency result is fabricated.
-
-The four analytics APIs compare against independent deterministic 500-record probe oracles; zero-log department is checked separately. Prior Phase 5-7 tests retain precise joins, ties, weekend/gap/rolling-average rules. This bounded probe verifies selected results within the 100k database, not every row. Two-client employee, punch-in, punch-out and correction races, two independent employee corrections and committed audit-chain length are checked. RSS snapshots are read from the verified child PID where available; peak memory remains NOT MEASURED. Bounded response size and query structure do not prove a numeric memory ceiling.
-
-No confirmed application performance defect exists without live plans. Application logic, seven indexes and dependencies are unchanged; no hints or speculative indexes were added. Before/after optimization evidence: NOT MEASURED. All 100k latency, executionStats, startup, storage, concurrency and memory acceptance remains NOT MEASURED pending manual execution. Do not start Phase 9 based on offline fixture tests alone.
-
-### Phase 8 executed isolated evidence
-
-`python -B -m unittest discover -s tests -v`: **211 passed, 0 failed**, 31.251 seconds (174 retained tests plus 37 new tests). Tests cover exact streaming count/unique keys, schema/data shapes, batch boundaries, database/token safety, capacity gates, timeout before writes, sanitized partial insertion failure, stopped-child startup failure/timeouts, nested EXPRESS_IXSCAN/lookup scans, non-summed metrics, percentile calculations, explicit NOT MEASURED memory and default no-connection execution. Default offline runner produced 20,242,245 estimated BSON bytes and 94,281,167 advisory budget bytes, with zero live inserts. Original contract, data model, problem statement, seed/sample files, application code and dependencies are unchanged. Syntax and git diff --check passed. Live database counts were not reread in this isolated-only task; no live connection occurred.
+**Phase 10 verdict: PARTIAL, ready for user review only.** No confirmed critical code/security defect was found in the scoped review. Literal IXSCAN/raw-explain grading interpretation, a fresh MongoDB 7/clean-clone run, hidden evaluator results, dependency vulnerability advisories, peak memory and long-term production hardening remain unverified. Index/pipeline changes or any live verification require separate approval. Phase 10 has not started.

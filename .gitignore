@@ -3,3 +3,12 @@ __pycache__/
 *.pyc
 
 tests/phase8_capacity.local.json
+
+# Private environments and generated test artifacts
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+*_offline_output.txt
