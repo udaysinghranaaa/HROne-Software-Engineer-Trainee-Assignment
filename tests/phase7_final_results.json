@@ -1,0 +1,554 @@
+{
+  "database": "hrone_p7v_20261010_5edb2b2cbac44530",
+  "date_ist": "2026-10-10T12:55:03.617228+05:30",
+  "checks": {
+    "cold_startup": {
+      "status": "PASS",
+      "seconds": 3.92,
+      "limit_seconds": 20,
+      "includes": "process spawn, imports, fresh MongoDB connection, new indexes, bind and health ping"
+    },
+    "health": {
+      "status": "PASS"
+    },
+    "registered_contract": {
+      "status": "PASS"
+    },
+    "employee_concurrency": {
+      "status": "PASS",
+      "statuses": [
+        201,
+        409
+      ],
+      "stored_documents": 1,
+      "dispatch_gap_ms": 0.056
+    },
+    "employee_create_validation_and_storage": {
+      "status": "PASS"
+    },
+    "employee_listing_and_pagination": {
+      "status": "PASS"
+    },
+    "punch_concurrency": {
+      "status": "PASS",
+      "statuses": [
+        201,
+        409
+      ],
+      "stored_documents": 1,
+      "dispatch_gap_ms": 0.29
+    },
+    "punch_validation_dates_and_storage": {
+      "status": "PASS"
+    },
+    "attendance_listing_filters_history_legacy": {
+      "status": "PASS"
+    },
+    "indexes_and_repeated_setup": {
+      "status": "PASS",
+      "indexes": [
+        {
+          "collection": "employees",
+          "name": "employee_code_unique",
+          "keys": [
+            [
+              "emp_code",
+              1
+            ]
+          ],
+          "unique": true
+        },
+        {
+          "collection": "employees",
+          "name": "employee_department_code",
+          "keys": [
+            [
+              "department",
+              1
+            ],
+            [
+              "emp_code",
+              1
+            ]
+          ],
+          "unique": false
+        },
+        {
+          "collection": "attendance_logs",
+          "name": "attendance_employee_date_unique",
+          "keys": [
+            [
+              "emp_code",
+              1
+            ],
+            [
+              "date",
+              1
+            ]
+          ],
+          "unique": true
+        },
+        {
+          "collection": "attendance_logs",
+          "name": "attendance_date_code",
+          "keys": [
+            [
+              "date",
+              -1
+            ],
+            [
+              "emp_code",
+              1
+            ]
+          ],
+          "unique": false
+        },
+        {
+          "collection": "attendance_logs",
+          "name": "attendance_latest_punch",
+          "keys": [
+            [
+              "emp_code",
+              1
+            ],
+            [
+              "punch_in",
+              -1
+            ],
+            [
+              "date",
+              -1
+            ]
+          ],
+          "unique": false
+        },
+        {
+          "collection": "employees",
+          "name": "employee_joined_department",
+          "keys": [
+            [
+              "joined_on",
+              1
+            ],
+            [
+              "department",
+              1
+            ]
+          ],
+          "unique": false
+        },
+        {
+          "collection": "employees",
+          "name": "employee_department_joined",
+          "keys": [
+            [
+              "department",
+              1
+            ],
+            [
+              "joined_on",
+              1
+            ]
+          ],
+          "unique": false
+        }
+      ]
+    },
+    "phase6_real_explain_commands_and_statistics": {
+      "status": "PASS",
+      "targets": {
+        "attendance_list": {
+          "stages": [
+            "FETCH",
+            "IXSCAN",
+            "LIMIT",
+            "PROJECTION_SIMPLE",
+            "SKIP"
+          ],
+          "indexes": [
+            "attendance_employee_date_unique"
+          ],
+          "statistics": [
+            {
+              "totalKeysExamined": 2,
+              "totalDocsExamined": 1,
+              "nReturned": 1,
+              "executionTimeMillis": 0
+            },
+            {
+              "nReturned": 1,
+              "executionTimeMillisEstimate": 0
+            },
+            {
+              "nReturned": 1,
+              "executionTimeMillisEstimate": 0
+            },
+            {
+              "nReturned": 1,
+              "executionTimeMillisEstimate": 0
+            },
+            {
+              "nReturned": 1,
+              "executionTimeMillisEstimate": 0
+            },
+            {
+              "nReturned": 2,
+              "executionTimeMillisEstimate": 0
+            }
+          ],
+          "has_ixscan": true,
+          "has_collection_scan": false,
+          "meets_scan_requirement_on_fixture": true,
+          "supporting_index_observed": true
+        },
+        "employee_monthly": {
+          "stages": [
+            "FETCH",
+            "IXSCAN",
+            "PROJECTION_SIMPLE"
+          ],
+          "indexes": [
+            "attendance_employee_date_unique",
+            "employee_code_unique"
+          ],
+          "statistics": [
+            {
+              "nReturned": 1,
+              "executionTimeMillisEstimate": 0
+            },
+            {
+              "totalKeysExamined": 1,
+              "totalDocsExamined": 1,
+              "nReturned": 1,
+              "executionTimeMillis": 1
+            },
+            {
+              "nReturned": 1,
+              "executionTimeMillisEstimate": 0
+            },
+            {
+              "nReturned": 1,
+              "executionTimeMillisEstimate": 0
+            },
+            {
+              "nReturned": 1,
+              "executionTimeMillisEstimate": 0
+            },
+            {
+              "totalKeysExamined": 5,
+              "totalDocsExamined": 5,
+              "nReturned": 1,
+              "executionTimeMillisEstimate": 0,
+              "collectionScans": 0
+            },
+            {
+              "nReturned": 1,
+              "executionTimeMillisEstimate": 1
+            },
+            {
+              "nReturned": 1,
+              "executionTimeMillisEstimate": 1
+            }
+          ],
+          "has_ixscan": true,
+          "has_collection_scan": false,
+          "meets_scan_requirement_on_fixture": true,
+          "supporting_index_observed": true
+        },
+        "department_summary": {
+          "stages": [
+            "FETCH",
+            "IXSCAN",
+            "PROJECTION_SIMPLE"
+          ],
+          "indexes": [
+            "attendance_employee_date_unique",
+            "employee_department_joined"
+          ],
+          "statistics": [
+            {
+              "nReturned": 4,
+              "executionTimeMillisEstimate": 1
+            },
+            {
+              "totalKeysExamined": 4,
+              "totalDocsExamined": 4,
+              "nReturned": 4,
+              "executionTimeMillis": 2
+            },
+            {
+              "nReturned": 4,
+              "executionTimeMillisEstimate": 0
+            },
+            {
+              "nReturned": 4,
+              "executionTimeMillisEstimate": 0
+            },
+            {
+              "nReturned": 4,
+              "executionTimeMillisEstimate": 0
+            },
+            {
+              "totalKeysExamined": 9,
+              "totalDocsExamined": 9,
+              "nReturned": 4,
+              "executionTimeMillisEstimate": 2,
+              "collectionScans": 0
+            },
+            {
+              "nReturned": 4,
+              "executionTimeMillisEstimate": 2
+            },
+            {
+              "nReturned": 1,
+              "executionTimeMillisEstimate": 2
+            },
+            {
+              "nReturned": 1,
+              "executionTimeMillisEstimate": 2
+            },
+            {
+              "nReturned": 1,
+              "executionTimeMillisEstimate": 2
+            }
+          ],
+          "has_ixscan": true,
+          "has_collection_scan": false,
+          "meets_scan_requirement_on_fixture": true,
+          "supporting_index_observed": true
+        },
+        "late_leaderboard": {
+          "stages": [
+            "FETCH",
+            "GROUP",
+            "IXSCAN",
+            "filter",
+            "group",
+            "ixseek",
+            "limit",
+            "nlj",
+            "project",
+            "seek"
+          ],
+          "indexes": [
+            "attendance_date_code",
+            "employee_department_code"
+          ],
+          "statistics": [
+            {
+              "nReturned": 7,
+              "executionTimeMillisEstimate": 1
+            },
+            {
+              "totalKeysExamined": 18,
+              "totalDocsExamined": 18,
+              "nReturned": 7,
+              "executionTimeMillis": 2
+            },
+            {
+              "nReturned": 7,
+              "executionTimeMillisEstimate": 0
+            },
+            {
+              "nReturned": 7,
+              "executionTimeMillisEstimate": 0
+            },
+            {
+              "nReturned": 7,
+              "executionTimeMillisEstimate": 0
+            },
+            {
+              "nReturned": 9,
+              "executionTimeMillisEstimate": 0
+            },
+            {
+              "nReturned": 9,
+              "executionTimeMillisEstimate": 0
+            },
+            {
+              "totalKeysExamined": 18,
+              "totalDocsExamined": 18,
+              "nReturned": 18,
+              "executionTimeMillisEstimate": 0,
+              "collectionScans": 0
+            },
+            {
+              "nReturned": 18,
+              "executionTimeMillisEstimate": 0
+            },
+            {
+              "nReturned": 18,
+              "executionTimeMillisEstimate": 0
+            },
+            {
+              "nReturned": 18,
+              "executionTimeMillisEstimate": 0
+            },
+            {
+              "totalKeysExamined": 3,
+              "totalDocsExamined": 3,
+              "nReturned": 3,
+              "executionTimeMillisEstimate": 3,
+              "collectionScans": 0
+            },
+            {
+              "nReturned": 3,
+              "executionTimeMillisEstimate": 3
+            },
+            {
+              "nReturned": 3,
+              "executionTimeMillisEstimate": 3
+            },
+            {
+              "nReturned": 2,
+              "executionTimeMillisEstimate": 3
+            },
+            {
+              "nReturned": 2,
+              "executionTimeMillisEstimate": 3
+            },
+            {
+              "nReturned": 2,
+              "executionTimeMillisEstimate": 3
+            }
+          ],
+          "has_ixscan": true,
+          "has_collection_scan": false,
+          "meets_scan_requirement_on_fixture": true,
+          "supporting_index_observed": true
+        },
+        "department_trend": {
+          "stages": [
+            "EXPRESS_IXSCAN"
+          ],
+          "indexes": [
+            "attendance_date_code",
+            "employee_department_code",
+            "employee_department_joined"
+          ],
+          "statistics": [
+            {
+              "nReturned": 1,
+              "executionTimeMillisEstimate": 0
+            },
+            {
+              "totalKeysExamined": 1,
+              "totalDocsExamined": 1,
+              "nReturned": 1,
+              "executionTimeMillis": 9
+            },
+            {
+              "nReturned": 1
+            },
+            {
+              "nReturned": 1,
+              "executionTimeMillisEstimate": 0
+            },
+            {
+              "nReturned": 10,
+              "executionTimeMillisEstimate": 0
+            },
+            {
+              "nReturned": 10,
+              "executionTimeMillisEstimate": 0
+            },
+            {
+              "totalKeysExamined": 25,
+              "totalDocsExamined": 25,
+              "nReturned": 10,
+              "executionTimeMillisEstimate": 2,
+              "collectionScans": 0
+            },
+            {
+              "totalKeysExamined": 28,
+              "totalDocsExamined": 28,
+              "nReturned": 10,
+              "executionTimeMillisEstimate": 8,
+              "collectionScans": 0
+            },
+            {
+              "nReturned": 10,
+              "executionTimeMillisEstimate": 8
+            },
+            {
+              "nReturned": 10,
+              "executionTimeMillisEstimate": 8
+            },
+            {
+              "nReturned": 10,
+              "executionTimeMillisEstimate": 8
+            },
+            {
+              "nReturned": 10,
+              "executionTimeMillisEstimate": 8
+            },
+            {
+              "nReturned": 10,
+              "executionTimeMillisEstimate": 8
+            },
+            {
+              "nReturned": 10,
+              "executionTimeMillisEstimate": 8
+            }
+          ],
+          "has_ixscan": true,
+          "has_collection_scan": false,
+          "meets_scan_requirement_on_fixture": true,
+          "supporting_index_observed": true
+        }
+      },
+      "large_dataset_acceptance": "NOT_MEASURED: tiny fixtures do not establish the 100k scan requirement"
+    },
+    "phase6_validation_contract": {
+      "status": "PASS"
+    },
+    "phase6_explain_read_only": {
+      "status": "PASS"
+    },
+    "phase7_five_way_create_punch_in_punch_out": {
+      "status": "PASS"
+    },
+    "phase7_correction_race_history_and_retry": {
+      "status": "PASS",
+      "successes": 1,
+      "statuses": [
+        409,
+        409,
+        409,
+        409,
+        200
+      ]
+    },
+    "phase7_patch_punch_out_race_recovery": {
+      "status": "PASS",
+      "statuses": [
+        200,
+        409
+      ]
+    },
+    "phase7_independent_employee_concurrency": {
+      "status": "PASS"
+    },
+    "phase7_cross_year_overnight_half_up_boundaries": {
+      "status": "PASS"
+    },
+    "phase7_extended_analytics_read_only_oracles": {
+      "status": "PASS"
+    },
+    "attendance_db_unchanged": {
+      "status": "PASS",
+      "counts": {
+        "employees": 6,
+        "attendance_logs": 9
+      }
+    }
+  },
+  "http_requests": 120,
+  "status": "PASS",
+  "development_counts_before": {
+    "employees": 6,
+    "attendance_logs": 9
+  },
+  "server_process_stopped": true,
+  "cleanup": "PASS"
+}

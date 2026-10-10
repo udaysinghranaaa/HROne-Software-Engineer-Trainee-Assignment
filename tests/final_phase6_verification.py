@@ -4,6 +4,9 @@ from bson import BSON
 import final_phase3_verification as harness
 from final_phase5_verification import seed_owned_fixtures
 
+# Explicit read-index stages only; never infer indexed access from an unknown name.
+READ_INDEX_STAGES = frozenset({'IXSCAN', 'EXPRESS_IXSCAN', 'CLUSTERED_IXSCAN',
+                               'EXPRESS_CLUSTERED_IXSCAN', 'DISTINCT_SCAN'})
 
 def inspect_plan(document):
     """Inspect winning/executed trees, including cursor/shard/SBE and lookup statistics.
@@ -28,7 +31,7 @@ def inspect_plan(document):
     walk(document)
     scans = 'COLLSCAN' in stages or any(node.get('collectionScans', 0) > 0 for node in statistics)
     return {'stages': sorted(stages), 'indexes': sorted(indexes), 'statistics': statistics,
-            'has_ixscan': 'IXSCAN' in stages, 'has_collection_scan': scans}
+            'has_ixscan': bool(stages & READ_INDEX_STAGES), 'has_collection_scan': scans}
 
 
 CASES = (
@@ -48,8 +51,8 @@ SUPPORTING_INDEXES = {
 }
 
 
-def phase6_checks(http, database, codes, epoch, passed):
-    seed_owned_fixtures(database, phase=6)
+def phase6_checks(http, database, codes, epoch, passed, fixture_phase=6):
+    seed_owned_fixtures(database, phase=fixture_phase)
     def snapshot():
         return {name: [BSON.encode(doc) for doc in database[name].find({}).sort('_id', 1).limit(1000)]
                 for name in ('employees', 'attendance_logs')}

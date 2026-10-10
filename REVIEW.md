@@ -178,3 +178,167 @@ Executed final command: `.venv/Scripts/python.exe -B -m unittest discover -s tes
 Final static verification passed: syntax checks for 13 Python files; imports/route/schema checks exercised in the suite; pip check with no broken requirements; git diff --check; new-file whitespace checks; credential-URI exposure checks; and six SHA-256 comparisons against the original protected files. The final 144-test suite completed in 8.177 seconds. No live Phase 6 result artifact exists. Git's only notices concern Windows line-ending normalization.
 
 No live MongoDB operations were performed in this implementation session. No original assignment, contract, data model, sample datasets, seed script, credentials or Atlas settings were changed. No seed execution, Dockerfile, push or Phase 7-10 work occurred. The final manual command is in README; obtain live evidence before integration sign-off.
+
+
+## Phase 7 audit and regression hardening - 2026-10-10 (IST)
+
+**Scope:** advanced isolated boundary/contract/concurrency QA and a prepared manual live harness. No application rewrite or Phase 8 load generation. Before coding, the audit identified coverage gaps in five-client races, retries after contention, year/month overnight transitions, generated analytics calendar boundaries and cross-route error schemas. Existing tests already covered ordinary calculations, legacy BSON/history, filters/defaults, two-client races, ranking and windows. The saved Phase 6 EXPRESS_IXSCAN false-negative was the confirmed verifier defect.
+
+### Requirements-to-tests coverage matrix
+
+PASS below means executed isolated evidence. PARTIAL means prior Phase 3-6 live evidence exists, but the expanded Phase 7 live checks remain NOT TESTED. No current requirement is marked BLOCKED by connectivity because no Atlas run was attempted. Performance at 100k records is NOT TESTED, not PASS.
+
+| API / operation ID | Existing tests | Phase 7 additional coverage | Isolated / expanded live |
+|---|---|---|---|
+| GET /health / health | Phase3 D01, lifecycle tests | all_twelve_routes_driver_failures_match_error_schema | PASS / NOT TESTED |
+| POST /employees / createEmployee | Phase3 D02-D06, D04 concurrency | missing_body_and_each_required_employee_field; employee_min_max_and_extra_fields_preserve_defaults; wrong_scalar_types_for_each_employee_and_correction_field; five_way_duplicate_employee_creation | PASS / NOT TESTED |
+| GET /employees / listEmployees | Phase3 D07-D10 | absence_records_not_punch_out_candidates_and_missing_filters; all-route errors | PASS / NOT TESTED |
+| POST /attendance/punch-in / punchIn | Phase3 D11-D19 | epoch_min_max_type_and_bounds_matrix; grace_floor_generated_second_matrix; cross_month_year_overnight_exact_shift_end_boundaries; five_way_punch_in_and_punch_out | PASS / NOT TESTED |
+| GET /attendance / listAttendance | Phase3 D20-D23 | empty unknown-code filter; all-route errors; exact schema catalog | PASS / NOT TESTED |
+| POST /attendance/punch-out / punchOut | Phase4 punch-out tests | duration_half_day_overtime_generated_matrix; five-way races; cross-year/month/leap transitions; absence candidate exclusion | PASS / NOT TESTED |
+| PATCH /attendance/{emp_code}/{date} / regularizeAttendance | Phase4 correction, snapshot and audit tests | five_way_corrections_one_history_and_retry_chain; patch_punch_out_race_retry_preserves_both_changes; all_status_transition_matrix_and_rejected_audits_unchanged; rejected_corrections_no_partial_storage_or_history | PASS / NOT TESTED |
+| GET employee monthly / employeeMonthly | Phase5 monthly/oracle tests | join_date_calendar_generated_month_matrix (first/middle/last/future across leap/non-leap months) | PASS / NOT TESTED |
+| GET department summary / departmentSummary | Phase5 summary/oracle tests | summary_zero_log_legacy_defaults_and_response_order; unknown department empty result | PASS / NOT TESTED |
+| GET late leaderboard / lateLeaderboard | Phase5 rank/tie/orphan/filter tests | all_tied_rank_cutoffs_more_rows_than_limit (five ties, limits 1/2/5/50) | PASS / NOT TESTED |
+| GET department trend / departmentTrend | Phase5 calendar/window/range tests | trend_cross_month_year_and_leap_day_oracles; one-day range | PASS / NOT TESTED |
+| GET admin explain / explainEndpoint | Phase6 command/schema/redaction/parser tests | saved_express_stage_regression_without_changing_report; modern_indexed_allowlist_and_unknown_stages_not_indexed; nested_express_rejected_candidates_and_lookup_scans | PASS / NOT TESTED |
+
+All abbreviated Phase 7 names above refer to `test_...` methods in `tests/test_phase7.py`. Common additions cover all twelve operation IDs/status declarations/request field sets and simulated driver failures, with response validation against the unchanged original YAML. Exact success/error response-field assertions remain in prior tests; every new HTTP helper checks the original response schema. ObjectId resource leakage is rejected; raw explain command expressions may legitimately contain the `_id` field name and are not resource documents.
+
+| Rule / integrity requirement | Boundary evidence | Status |
+|---|---|---|
+| R1 IST/UTC, truncation and overnight date | UTC/IST midnight, naive BSON, fractional milliseconds, month/year/leap-day shift transitions | PASS isolated; new live NOT TESTED |
+| R2 grace and floors | 599/600/601/659/660/3599/3600 seconds and next-calendar-day reset | PASS isolated |
+| R3 overtime | 29:59, 30:00, 30:01; overnight end; prior open-record tests | PASS isolated |
+| R4/R5 hours, half-up, half-day | generated whole-second durations, 4.49/4.50 transition, 24-hour bound and invalid ordering | PASS isolated |
+| R6 statuses and transitions | all three presence statuses to all five statuses, absence-to-presence restoration, invalid combinations | PASS isolated |
+| R7/R9 working days/headcount | first/middle/last/future joining dates, weekday/weekend/zero-log/leap cases, independent calendar oracle | PASS isolated |
+| R8 analytics precision | prior Decimal half-up ties and new stored-value/oracle comparisons | PASS isolated |
+| R10 filtered pagination | prior first/last/empty/bounds tests; shared query schema and defaults preserved | PASS isolated |
+| Five-client creation/punch races | one employee/punch-in 201 and four 409; one punch-out 200 and four 409 | PASS isolated; real Phase7 NOT TESTED |
+| Corrections and cross-operation contention | one forced-snapshot winner, retry chain, prior history unchanged, independent employees | PASS isolated; real Phase7 NOT TESTED |
+| No partial audit write / safe errors | failed/invalid/no-op requests leave BSON unchanged; controlled 503 on all routes | PASS isolated |
+| Unique keys / seven indexes / startup audit | all prior index, duplicate-audit and lifespan tests retained | PASS isolated; prior live PASS |
+| Explain semantic classification | explicit documented read-stage allowlist, genuine COLLSCAN and lookup counters, rejected plans excluded | PASS isolated; prior server evidence reinterpreted only |
+| Large dataset / Phase7 cold startup / cleanup | no live run or 100k generation performed | NOT TESTED |
+
+### Confirmed defect and minimal fix
+
+`tests/final_phase6_verification.py::inspect_plan` previously tested only `'IXSCAN' in stages`. The saved Phase 6 trend used EXPRESS_IXSCAN and was falsely classified as not indexed. The detector now recognizes the explicit read-stage set IXSCAN, EXPRESS_IXSCAN, CLUSTERED_IXSCAN, EXPRESS_CLUSTERED_IXSCAN and DISTINCT_SCAN. Unknown names, EXPRESS_UPDATE/DELETE, EOF and FETCH do not establish indexed access. Genuine COLLSCAN and positive lookup collectionScans still flag collection scans; rejected candidates remain excluded. Metrics and the raw API output are unchanged. [MongoDB documents modern EXPRESS index stages](https://www.mongodb.com/docs/v8.0/reference/explain-results/).
+
+`app/main.py`, its query/pipeline builders and index definitions were not changed. Tests found no confirmed additional application defect. Initial new-test failures included fixture-copy wiring and an incorrect lateness expectation after the attendance day changed; those test issues were corrected rather than altering application rules. The saved EXPRESS report is read-only historical evidence, not rewritten to fabricate a new live result. The regression uses a captured sanitized stage/statistics fixture so future manual report reruns cannot make isolated tests nondeterministic.
+
+### Contract interpretations preserved
+
+- PATCH rejects derived/unsupported fields with 422, retaining the user's prior clarification. Other request models ignore extras under the global convention.
+- A punch-out before every punch-in returns 404 under the selector, retaining the user's prior clarification; equal selected times and >24h duration return 422.
+- Monthly/department present_days exclude pre-join logs; other metrics retain their stated filters. Trend counts daily presence regardless of weekday, while rates are null on weekends.
+- Explain preserves raw planner/execution data with the previously approved deployment-metadata redaction. No new authentication or string-length rules are invented for plain-string lookup parameters.
+- Empty/unknown filtered listings may return empty 200 pages, while missing monthly employees/trend departments return 404. An empty-resource explain can return a valid 200 plan.
+- The assignment's stored-data schema defines allowed types/statuses. Recovery from arbitrarily corrupt, out-of-schema records is not claimed; invalid client inputs and contract-valid legacy missing fields are covered.
+
+### Live harness and evidence limits
+
+`tests/final_phase7_verification.py` is prepared for manual execution only. It reuses the proven parent connection/environment, Windows launcher, owned child PID/database/token/port, startup deadline, BSON snapshots and exact ownership-token cleanup checks. The permitted name set adds hrone_p7v_ only (35 UTF-8 bytes); Phase 8 names remain rejected. Previous harness defaults and cleanup checks remain intact. Only existing phase-limit assertions were extended from unsupported phase 7 to unsupported phase 8; prior 144 tests remain.
+
+The callback adds actual simultaneous five-client creation/punch-in/punch-out, multiple corrections with audit-chain comparison, correction/punch-out recovery, five independent employee writes, cross-year shifts and half-up boundaries, four analytics oracles and corrected explain classification. Real corrections may serialize and have several valid winners; live expectations count committed successes/history instead of demanding an artificial single snapshot. All fixture writes occur after parent ownership verification in the dedicated DB. No seeder or development-data writes occur. Analytics read snapshots are bounded to fewer than 1000 documents. Cleanup is exclusively the existing verified owner/name path; a failure is reported without blindly retrying deletion.
+
+The complete callback passed against fake owned storage/ASGI HTTP; this is not Atlas evidence. Phase 7 live requests, startup and cleanup remain NOT TESTED. Prior Phase 3-6 saved reports remain untouched. The seven indexes and original attendance_db remain unchanged. Phase 8 performance evaluation is ready for future work but has not started.
+
+### Exact contract input/output catalog
+
+The following audit snapshot is derived from the unchanged YAML. Referenced schemas below retain their original property types, bounds and required fields; prose cross-field rules are covered above. Unsupported extras follow the documented model-specific behavior, not a newly invented blanket rejection policy.
+
+**GET `/health` / `health`**
+
+- Parameters: none.
+- Responses: 200: `status` string (enum=['ok']); 503: `detail` string.
+
+**POST `/employees` / `createEmployee`**
+
+- Parameters: none.
+- Request body: `emp_code` required: string (pattern=^EMP\d{4,6}$); `name` required: string (minLength=1; maxLength=100); `email` required: string (maxLength=120; pattern=^[^@\s]+@[^@\s]+\.[^@\s]+$); `department` required: string (minLength=1; maxLength=50); `shift_start` optional: string (pattern=^([01]\d|2[0-3]):[0-5]\d$; default=09:30); `shift_end` optional: string (pattern=^([01]\d|2[0-3]):[0-5]\d$; default=18:30); `joined_on` required: string (format=date).
+- Responses: 201: `emp_code` string, `name` string, `email` string, `department` string, `shift_start` string, `shift_end` string, `joined_on` string (format=date), `created_at` EpochMillis; 409: `detail` string; 422: `detail` array.
+
+**GET `/employees` / `listEmployees`**
+
+- Parameters: `department` [query, optional]: string; `page` [query, optional]: integer (minimum=1; default=1); `page_size` [query, optional]: integer (minimum=1; maximum=100; default=20).
+- Responses: 200: `items` array, `total` integer, `page` integer, `page_size` integer; 422: `detail` array.
+
+**POST `/attendance/punch-in` / `punchIn`**
+
+- Parameters: none.
+- Request body: `emp_code` required: string; `punched_at` optional: EpochMillis; `status` optional: PresenceStatus (default=PRESENT).
+- Responses: 201: `emp_code` string, `date` string (format=date), `status` Status, `punch_in` EpochMillisNullable, `punch_out` EpochMillisNullable, `work_hours` number or null, `late_minutes` integer, `overtime_minutes` integer, `half_day` boolean, `history` array; 404: `detail` string; 409: `detail` string; 422: `detail` array.
+
+**POST `/attendance/punch-out` / `punchOut`**
+
+- Parameters: none.
+- Request body: `emp_code` required: string; `punched_at` optional: EpochMillis.
+- Responses: 200: `emp_code` string, `date` string (format=date), `status` Status, `punch_in` EpochMillisNullable, `punch_out` EpochMillisNullable, `work_hours` number or null, `late_minutes` integer, `overtime_minutes` integer, `half_day` boolean, `history` array; 404: `detail` string; 409: `detail` string; 422: `detail` array.
+
+**GET `/attendance` / `listAttendance`**
+
+- Parameters: `emp_code` [query, optional]: string; `date_from` [query, optional]: string (format=date); `date_to` [query, optional]: string (format=date); `status` [query, optional]: Status; `page` [query, optional]: integer (minimum=1; default=1); `page_size` [query, optional]: integer (minimum=1; maximum=100; default=20).
+- Responses: 200: `items` array, `total` integer, `page` integer, `page_size` integer; 422: `detail` array.
+
+**PATCH `/attendance/{emp_code}/{date}` / `regularizeAttendance`**
+
+- Parameters: `emp_code` [path, required]: string; `date` [path, required]: string (format=date).
+- Request body: `status` optional: Status; `punch_in` optional: EpochMillis; `punch_out` optional: EpochMillis; `reason` required: string (minLength=5; maxLength=200); `regularized_by` required: string (minLength=1; maxLength=50).
+- Responses: 200: `emp_code` string, `date` string (format=date), `status` Status, `punch_in` EpochMillisNullable, `punch_out` EpochMillisNullable, `work_hours` number or null, `late_minutes` integer, `overtime_minutes` integer, `half_day` boolean, `history` array; 404: `detail` string; 409: `detail` string; 422: `detail` array.
+
+**GET `/analytics/employees/{emp_code}/monthly` / `employeeMonthly`**
+
+- Parameters: `emp_code` [path, required]: string; `month` [query, required]: string (pattern=^\d{4}-(0[1-9]|1[0-2])$).
+- Responses: 200: `emp_code` string, `month` string, `working_days` integer, `present_days` number, `leave_days` integer, `late_count` integer, `total_late_minutes` integer, `total_overtime_minutes` integer, `attendance_pct` number or null; 404: `detail` string; 422: `detail` array.
+
+**GET `/analytics/departments/summary` / `departmentSummary`**
+
+- Parameters: `month` [query, required]: string (pattern=^\d{4}-(0[1-9]|1[0-2])$); `department` [query, optional]: string.
+- Responses: 200: `month` string, `items` array; 422: `detail` array.
+
+**GET `/analytics/leaderboard/late` / `lateLeaderboard`**
+
+- Parameters: `month` [query, required]: string (pattern=^\d{4}-(0[1-9]|1[0-2])$); `limit` [query, optional]: integer (minimum=1; maximum=50; default=10); `department` [query, optional]: string.
+- Responses: 200: `month` string, `items` array; 422: `detail` array.
+
+**GET `/analytics/departments/{department}/trend` / `departmentTrend`**
+
+- Parameters: `department` [path, required]: string; `from` [query, required]: string (format=date); `to` [query, required]: string (format=date).
+- Responses: 200: `department` string, `items` array; 404: `detail` string; 422: `detail` array.
+
+**GET `/admin/explain/{endpoint}` / `explainEndpoint`**
+
+- Parameters: `endpoint` [path, required]: string (enum=['attendance_list', 'employee_monthly', 'department_summary', 'late_leaderboard', 'department_trend']); `emp_code` [query, optional]: string; `month` [query, optional]: string (pattern=^\d{4}-(0[1-9]|1[0-2])$); `department` [query, optional]: string; `limit` [query, optional]: integer (minimum=1; maximum=50; default=10); `date_from` [query, optional]: string (format=date); `date_to` [query, optional]: string (format=date); `status` [query, optional]: Status; `from` [query, optional]: string (format=date); `to` [query, optional]: string (format=date); `page` [query, optional]: integer (minimum=1; default=1); `page_size` [query, optional]: integer (minimum=1; maximum=100; default=20).
+- Responses: 200: `endpoint` string, `collection` string, `explain` object; 422: `detail` array.
+
+### Referenced schema field constraints
+
+These original schema definitions complete the catalog above, including nested response fields. References name other rows; nullable values and conditional/cross-field rules retain the documented contract decisions.
+
+| Schema | Required fields / constraints |
+|---|---|
+| EpochMillis | required: none specified; integer; minimum=100000000000; maximum=4102444800000; format=int64 |
+| EpochMillisNullable | required: none specified; integer or null; minimum=100000000000; maximum=4102444800000; format=int64 |
+| Status | required: none specified; string; enum=['PRESENT', 'ABSENT', 'LEAVE', 'WFH', 'ON_DUTY'] |
+| PresenceStatus | required: none specified; string; enum=['PRESENT', 'WFH', 'ON_DUTY'] |
+| EmployeeCreate | required: emp_code, name, email, department, joined_on; object {emp_code: string; pattern=^EMP\d{4,6}$, name: string; minLength=1; maxLength=100, email: string; maxLength=120; pattern=^[^@\s]+@[^@\s]+\.[^@\s]+$, department: string; minLength=1; maxLength=50, shift_start: string; pattern=^([01]\d\|2[0-3]):[0-5]\d$; default=09:30, shift_end: string; pattern=^([01]\d\|2[0-3]):[0-5]\d$; default=18:30, joined_on: string; format=date} |
+| Employee | required: emp_code, name, email, department, shift_start, shift_end, joined_on, created_at; object {emp_code: string, name: string, email: string, department: string, shift_start: string, shift_end: string, joined_on: string; format=date, created_at: EpochMillis} |
+| EmployeePage | required: items, total, page, page_size; object {items: array of Employee, total: integer, page: integer, page_size: integer} |
+| PunchInRequest | required: emp_code; object {emp_code: string, punched_at: EpochMillis, status: PresenceStatus} |
+| PunchOutRequest | required: emp_code; object {emp_code: string, punched_at: EpochMillis} |
+| RegularizeRequest | required: reason, regularized_by; object {status: Status, punch_in: EpochMillis, punch_out: EpochMillis, reason: string; minLength=5; maxLength=200, regularized_by: string; minLength=1; maxLength=50} |
+| HistoryEntry | required: at, by, reason, changes; object {at: EpochMillis, by: string, reason: string, changes: object} |
+| AttendanceRecord | required: emp_code, date, status, punch_in, punch_out, work_hours, late_minutes, overtime_minutes, half_day, history; object {emp_code: string, date: string; format=date, status: Status, punch_in: EpochMillisNullable, punch_out: EpochMillisNullable, work_hours: number or null, late_minutes: integer, overtime_minutes: integer, half_day: boolean, history: array of HistoryEntry} |
+| AttendancePage | required: items, total, page, page_size; object {items: array of AttendanceRecord, total: integer, page: integer, page_size: integer} |
+| EmployeeMonthly | required: emp_code, month, working_days, present_days, leave_days, late_count, total_late_minutes, total_overtime_minutes, attendance_pct; object {emp_code: string, month: string, working_days: integer, present_days: number, leave_days: integer, late_count: integer, total_late_minutes: integer, total_overtime_minutes: integer, attendance_pct: number or null} |
+| DepartmentSummary | required: month, items; object {month: string, items: array of object {department: string, headcount: integer, present_days: number, avg_work_hours: number or null, late_count: integer, total_late_minutes: integer, leave_count: integer, on_duty_count: integer}} |
+| Leaderboard | required: month, items; object {month: string, items: array of object {rank: integer; minimum=1, emp_code: string, name: string, department: string, total_late_minutes: integer, late_count: integer}} |
+| Trend | required: department, items; object {department: string, items: array of object {date: string; format=date, is_working_day: boolean, headcount: integer, present_count: number, late_count: integer, attendance_rate: number or null, moving_avg_7d: number or null}} |
+
+### Executed Phase 7 results and final checks
+
+Final command `.venv/Scripts/python.exe -B -m unittest discover -s tests -v`: **174 passed, 0 failed, 0 skipped**, in **8.579 seconds** (144 previous tests plus 30 Phase 7 tests). The complete Phase 7 callback was exercised only through fake storage/ASGI HTTP. Syntax checks passed for 15 Python files; imports/routes/response schemas are exercised by the suite; pip check reports no broken requirements; git diff --check and new-file whitespace checks pass; credential-URI checks pass. Six original protected-file hashes, app/main.py and saved Phase 3-6 results are unchanged. No Phase 7 live result artifact exists. No live MongoDB operations, permissions changes, seed execution, push or Phase 8 work occurred.
+
+**Manual command**, from candidate_kit: `.\.venv\Scripts\python.exe -B tests/final_phase7_verification.py`. Integration status is PARTIAL until that new live evidence exists; live Phase 7 checks are NOT TESTED, not PASSED or BLOCKED. No confirmed application FAIL remains and no runtime connectivity BLOCKED status is claimed without an attempted connection.

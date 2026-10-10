@@ -38,3 +38,10 @@ The Phase 4 verifier was subsequently executed manually: the saved result record
 - The saved Phase 5 live result now establishes its earlier 16 checks, 85 requests and 2.55-second startup with seven indexes. Phase 6 implementation and isolated testing are complete; its owned hrone_p6v_ manual verification is prepared, not live-executed. No startup work or index changes were added in Phase 6. Larger-scale timing and query-plan optimization remain pending evidence, outside this phase's execution.
 
 References: [MongoDB explain command and Atlas compatibility](https://www.mongodb.com/docs/manual/reference/command/explain/), [explain output formats](https://www.mongodb.com/docs/manual/reference/explain-results/), [PyMongo aggregation command usage](https://www.mongodb.com/docs/languages/python/pymongo-driver/current/aggregation/).
+
+
+## Phase 7 verification decisions
+
+- `has_ixscan` remains the verifier's indexed-read flag, now covering an explicit allowlist: IXSCAN, EXPRESS_IXSCAN, CLUSTERED_IXSCAN, EXPRESS_CLUSTERED_IXSCAN and DISTINCT_SCAN. Unknown stages and EXPRESS writes are not classified as indexed reads. This fixes a saved modern-plan false-negative without changing application output, metrics, indexes or historical results. [MongoDB explains modern stages](https://www.mongodb.com/docs/v8.0/reference/explain-results/).
+- Isolated contention tests force equal snapshots to verify conflict handling. Actual HTTP clients only synchronize dispatch: several PATCH requests can validly serialize and commit. The manual verifier therefore checks success/history counts and a continuous before/after chain rather than incorrectly requiring one winner in every live correction race.
+- Existing user clarifications on PATCH derived fields, pre-first-punch 404 and pre-join presence remain unchanged. Phase 7 adds its dedicated owned database prefix only; Phase 8 database identities are still rejected. No additional application defect or index justification was established, so application code/indexes remain unchanged. Large-data performance is not inferred from this classifier repair.

@@ -2,7 +2,7 @@
 
 A FastAPI and MongoDB backend for the HROne Software Engineer Trainee assignment. Employees can punch in and out, managers can correct attendance with an audit trail, and MongoDB aggregation reports provide monthly summaries, department totals, late rankings and daily trends. The Admin Explain API exposes real query execution plans for the five contract-supported read operations.
 
-**Status:** Phases 1–6 complete; all 12 required API operations implemented. The latest recorded automated suite passed **144 tests**, and Phase 6 live integration passed **14 checks / 62 HTTP requests**. Phases 7–10 remain pending. **100,000-record performance and grader-scale query-plan acceptance are not verified.**
+**Status:** Phases 1–6 complete; all 12 required API operations implemented. The Phase 7 isolated suite passed **174 tests**, and Phase 6 live integration passed **14 checks / 62 HTTP requests**. Phase 7 QA implementation is complete with live verification pending; Phases 8–10 remain pending. **100,000-record performance and grader-scale query-plan acceptance are not verified.**
 
 ## Specification and review documents
 
@@ -37,12 +37,12 @@ candidate_kit/
 |   |-- employees.json             # Original Extended JSON fixtures
 |   `-- attendance_logs.json
 |-- tests/
-|   |-- test_phase3.py / test_phase4.py / test_phase5.py / test_phase6.py
+|   |-- test_phase3.py / test_phase4.py / test_phase5.py / test_phase6.py / test_phase7.py
 |   |-- test_final_phase3_verification.py
 |   |-- aggregation_memory.py      # Isolated test interpreter, not MongoDB
 |   |-- phase5_fixtures.py
 |   |-- live_phase3.py
-|   |-- final_phase3_verification.py ... final_phase6_verification.py
+|   |-- final_phase3_verification.py ... final_phase7_verification.py
 |   `-- phase3_final_results.json ... phase6_final_results.json
 |-- requirements.txt
 |-- sample_seed.py
@@ -246,6 +246,12 @@ Automated totals are cumulative historical phase results, not separate counts to
 
 Phase 6 verified seven application indexes and all five explain targets. The report records unchanged development data (**6 employees / 9 attendance logs**), stopped test server and temporary database cleanup **PASS**. The four recorded startup measurements are below the assignment's 20-second limit.
 
+### Phase 7 isolated QA
+
+**174 tests passed, zero failures**: all previous 144 tests plus 30 advanced tests covering five-way races, correction retry/history chains, cross-month/year overnight shifts, generated duration/calendar boundaries, all-route error schemas and modern explain stages. The complete Phase 7 verifier callback was tested with fake storage/HTTP; this does not establish real Atlas concurrency or cleanup.
+
+The confirmed fix is in the verification classifier: `EXPRESS_IXSCAN` and explicit documented read-index equivalents now count as indexed access; unknown stage names do not. Genuine collection scans and rejected-plan exclusions remain covered. Application code and the seven indexes are unchanged. See [the Phase 7 coverage matrix](REVIEW.md#requirements-to-tests-coverage-matrix) and contract catalog for requirement-level evidence. Phase 7 live startup/concurrency/cleanup and 100k acceptance remain **NOT TESTED**.
+
 ### Optional manual live reruns
 
 Run only when intentionally verifying against the configured MongoDB deployment:
@@ -255,6 +261,8 @@ Run only when intentionally verifying against the configured MongoDB deployment:
 .\.venv\Scripts\python.exe -B tests/final_phase4_verification.py
 .\.venv\Scripts\python.exe -B tests/final_phase5_verification.py
 .\.venv\Scripts\python.exe -B tests/final_phase6_verification.py
+# Prepared Phase 7 harness; has not been executed against Atlas:
+.\.venv\Scripts\python.exe -B tests/final_phase7_verification.py
 ```
 
 Each harness launches an isolated child server on a dynamically bound localhost port and validates its process/database/token identity. Writes target only its fresh, collision-checked, owned temporary database; names are within the Atlas 38-byte limit. The original `attendance_db` is read for before/after snapshots. Cleanup stops the owned server and drops only the temporary database after exact name and ownership-token verification. No harness invokes `sample_seed.py`.
@@ -269,9 +277,10 @@ Each harness launches an isolated child server on a dynamically bound localhost 
 | 4 | Punch-out, corrections and atomic audit updates — complete |
 | 5 | Four aggregation analytics APIs — complete |
 | 6 | Admin Explain API and live fixture verification — complete |
-| 7–10 | Pending; not started as part of this work |
+| 7 | Advanced isolated QA and explain-detector fix complete; manual live verification NOT TESTED |
+| 8–10 | Pending; not started as part of this work |
 
-The **100,000-record workload remains unverified**: current live fixtures do not establish throughput, latency, query-plan stability or the grader's IXSCAN/no-COLLSCAN acceptance at that scale. Phase 6's saved trend plan reports `EXPRESS_IXSCAN`, supporting indexes and no collection scan; the verifier's literal `IXSCAN` flag remains false for that target. Overall integration PASS must not be read as large-dataset acceptance. Further performance work remains pending.
+The **100,000-record workload remains unverified**: current live fixtures do not establish throughput, latency, query-plan stability or the grader's IXSCAN/no-COLLSCAN acceptance at that scale. Phase 6's saved trend plan reports `EXPRESS_IXSCAN`, supporting indexes and no collection scan; the historical verifier's literal `IXSCAN` flag was false for that target. Phase 7 fixes this detector using an explicit documented read-index-stage allowlist; the original report is preserved. Overall integration PASS must not be read as large-dataset acceptance. Further performance work remains pending.
 
 There is no authentication or holiday calendar in the assignment. `regularized_by` is free text, not an authenticated identity. Earlier DNS/TLS/startup failures are documented historically in REVIEW.md; the saved later reports show successful live runs. No performance guarantee is inferred from isolated test doubles or small live fixtures.
 

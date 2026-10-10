@@ -13,7 +13,7 @@ from phase5_fixtures import fixture_data, monthly_expected, summary_expected, le
 
 
 def seed_owned_fixtures(database, phase=5):
-    assert phase in (5, 6) and database.name.startswith(f"hrone_p{phase}v_"), "Fixture phase/database mismatch"
+    assert phase in (5, 6, 7) and database.name.startswith(f"hrone_p{phase}v_"), "Fixture phase/database mismatch"
     harness.guard_database(database.name, database.name)
     owner = database["_verification_owner"].find_one({"_id": "owner"})
     assert owner and owner.get("database") == database.name and isinstance(owner.get("run_token"), str) and re.fullmatch(r"[0-9a-f]{32}", owner["run_token"]), "Fixture ownership missing"

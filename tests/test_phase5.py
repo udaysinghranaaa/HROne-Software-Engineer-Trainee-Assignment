@@ -274,7 +274,7 @@ class Phase5Tests(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             harness.guard_database(name, name[:-1] + "b")
         with self.assertRaises(RuntimeError):
-            harness.generate_database_name("a" * 32, phase=7)
+            harness.generate_database_name("a" * 32, phase=8)
 
     def test_trend_four_decimal_half_up_tie(self):
         # 1 / 32 = .03125: half-up must give .0313 rather than .0312.

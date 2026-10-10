@@ -37,14 +37,14 @@ RESULT_FILE = ROOT / "tests/phase3_final_results.json"
 def guard_database(name, expected):
     if len(name.encode("utf-8")) > 38:
         raise RuntimeError("Test database name exceeds the 38-byte safety limit")
-    if name != expected or not re.fullmatch(r"hrone_p[3456]v_[0-9]{8}_[0-9a-f]{16}", name):
+    if name != expected or not re.fullmatch(r"hrone_p[34567]v_[0-9]{8}_[0-9a-f]{16}", name):
         raise RuntimeError("Unsafe test database identity; refusing writes or cleanup")
     if name == "attendance_db":
         raise RuntimeError("Development database must never be a write target")
 
 
 def generate_database_name(token, phase=3):
-    if phase not in (3, 4, 5, 6):
+    if phase not in (3, 4, 5, 6, 7):
         raise RuntimeError("Unsupported verification phase")
     name = f"hrone_p{phase}v_" + datetime.now(IST).strftime("%Y%m%d") + "_" + token[:16]
     guard_database(name, name)
