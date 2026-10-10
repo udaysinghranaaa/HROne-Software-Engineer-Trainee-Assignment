@@ -2,9 +2,24 @@
 
 HROne trainee assignment backend using Python, FastAPI, Pydantic and PyMongo. All application code is in [app/main.py](app/main.py). The service manages employees, attendance, atomic corrections with audit history, four MongoDB analytics reports and five explain targets.
 
-**Status:** Phases 1-8 complete; Phase 9 and Phase 10 audits completed with qualified submission readiness. **218 offline tests passed, zero failures.** Saved Phase 8 verification passed on 100,000 attendance fixture documents and 1,050 employees, with 111 HTTP requests and successful owned-database cleanup. Final submission awaits user review and public-publication verification. See [REVIEW.md](REVIEW.md) for the compliance matrix, security review and limitations, and [DECISIONS.md](DECISIONS.md) for the five required concise answers.
+**Current verification:** 12 API operations implemented; 218 automated tests and 170 additional subtests passed. The saved 100,000-attendance-record benchmark completed and index plans were verified. The repository is publicly available and `main` is synchronized, as confirmed by the candidate. These are local/saved results and candidate-confirmed repository status, not independent production guarantees. **Ready for candidate submission, subject to completing official form requirements.**
 
-## Setup and running
+See [REVIEW.md](REVIEW.md) for the compliance matrix, security review and limitations, and [DECISIONS.md](DECISIONS.md) for the five required concise answers.
+
+## Tech Stack
+
+Python 3.11+, FastAPI, Pydantic, PyMongo and MongoDB 6.0+; python-dotenv for optional environment configuration, unittest and PyYAML for offline verification.
+
+## Key Features
+
+- Employee management and attendance workflows with IST/overnight handling.
+- Atomic punch-out and corrections, concurrency protection and append-only audit history.
+- Four MongoDB aggregation analytics APIs and five execution-plan explain targets.
+- Seven indexes, bounded pagination and saved 100,000-record benchmark evidence.
+
+## Quick Start
+
+### 1. Install dependencies
 
 Prerequisites: Python 3.11+ (verified locally with 3.13.16), MongoDB 6.0+; the original candidate-kit local setup uses MongoDB 7. Run from the directory containing requirements.txt. Runtime dependencies are in [requirements.txt](requirements.txt); PyYAML is needed only for tests/verification. The established test runner is unittest; pytest is not required.
 
@@ -16,6 +31,8 @@ python -m venv .venv
 
 On Linux/macOS, create the environment with `python3 -m venv .venv`, activate with `source .venv/bin/activate`, then run the same pip commands using `python`.
 
+### 2. Configure MongoDB
+
 Set MONGO_URI and MONGO_DB in the environment or a private project-root `.env`. Explicit environment variables take priority. Local defaults are:
 
 ```dotenv
@@ -25,7 +42,9 @@ MONGO_DB=attendance_db
 
 For Atlas, use your private Python driver URI, an existing permitted client IP and a database user authorized for reads/writes and startup index creation. Never publish the URI, password or .env contents. Verification also needs access to its dedicated temporary databases, ownership markers, indexes and cleanup; it performs no permission or network-setting changes. The shared verification harness explicitly loads project-root .env before initializing its parent client and inheriting the same URI into its child.
 
-Activate the environment and use the required assignment command:
+### 3. Start the API
+
+On Windows, activate the environment and use the required assignment command:
 
 ```powershell
 .\.venv\Scripts\Activate.ps1
@@ -33,6 +52,10 @@ uvicorn app.main:app --port 8000
 ```
 
 If PowerShell activation is unavailable, the equivalent interpreter-specific command is `.\.venv\Scripts\python.exe -m uvicorn app.main:app --port 8000`; the official command above remains supported.
+
+On Linux/macOS, use the activated environment from step 1 and run `uvicorn app.main:app --port 8000`.
+
+### 4. Open Swagger UI
 
 Startup pings MongoDB, audits duplicate natural keys and creates all seven indexes idempotently. It never repairs or reseeds records. Health readiness must complete within 20 seconds. Swagger UI: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs); generated schema: `/openapi.json`. Try read requests first; Swagger write requests affect the selected MONGO_DB.
 
@@ -83,13 +106,22 @@ Explain targets: `attendance_list`, `employee_monthly`, `department_summary`, `l
 
 ## Testing and saved evidence
 
-Offline command (no live database operations):
+The original test runner is `unittest`. Run the offline suite without live database operations:
 
 ```powershell
 .\.venv\Scripts\python.exe -B -m unittest discover -s tests -v
 ```
 
-Phase 10 audit: **218 passed, 0 failed, 0 skipped**, 17.841 seconds; pip check passed. Isolated doubles do not prove server behavior; saved live reports supply separate evidence.
+Optional alternative: with the project virtual environment activated, install and run `pytest`:
+
+```sh
+python -m pip install pytest
+python -m pytest -q
+```
+
+Candidate-verified pytest result: **218 tests passed and 170 subtests passed**. Pytest is optional and is not included in `requirements.txt`; the original `unittest` command above remains supported. This README update did not rerun either test runner.
+
+Phase 10 audit: **218 passed, 0 failed, 0 skipped**, 17.841 seconds; pip check passed. The candidate additionally reports **170 passing subtests**, separate from the 218 test-method total. No new tests were run for this README update. Isolated doubles do not prove server behavior; saved live reports supply separate evidence.
 
 | Phase | Saved PASS checks | HTTP requests | Startup | Report |
 |---|---:|---:|---:|---|
@@ -134,11 +166,10 @@ Phase 8's default command only prints an offline plan:
 
 There is no authentication, holiday calendar, global payload cap or ingress rate limiting in the assignment. regularized_by is free text. Audit history and leaderboard tie responses can grow; listing limits bound document count, not response bytes. Peak memory, clean-clone MongoDB 7 execution and hidden grader results are unverified. A literal IXSCAN-only checker or strict unredacted-explain checker may differ from the accepted modern-stage/redaction interpretation; these caveats are documented rather than hidden. Changes to pipelines/indexes or production security controls need separate review and approval.
 
-Submit the original required runtime and documentation files in a public Git repository: app/main.py, requirements.txt, REVIEW.md, DECISIONS.md and README.md. Preserve the official contract and model, single-file runtime and required launch command. Exclude .env, credentials, virtual environments, private dumps, capacity files, caches and Dockerfiles. Neither final audit staged, committed, pushed, modified the remote or submitted anything. Phase 10 is complete and awaits user review. The original assessment requires a public repository and submission by the deadline/method in the invitation email; the email deadline was not supplied, and public visibility could not be independently verified. Confirm both before submission.
-
+Submit the original required runtime and documentation files in a public Git repository: app/main.py, requirements.txt, REVIEW.md, DECISIONS.md and README.md. Preserve the official contract and model, single-file runtime and required launch command. Exclude .env, credentials, virtual environments, private dumps, capacity files, caches and Dockerfiles. Neither final audit staged, committed, pushed, modified the remote or submitted anything. Phase 10 is complete. The candidate confirms that the repository is publicly available and `main` is synchronized; this updates the historical audit's unverified publication status without changing its findings. Complete the official submission form and follow the deadline/method in the invitation email; the exact deadline is not documented here.
 
 ### Final compatibility verdict
 
 The five explain response envelopes satisfy the original required fields (`endpoint`, `collection`, `explain`); metadata removal does not delete any mandatory schema field. The prose request for raw output still has the documented user-approved redaction exception. MongoDB documents EXPRESS_IXSCAN as a real optimized index scan introduced in 8.0; stages are preserved exactly, and no fake IXSCAN or hint was added. A hidden literal-stage or complete-document-equality checker remains unknown. See [Phase 10 findings](REVIEW.md#phase-10-final-verification) for primary sources and final qualifications.
 
-**Phase 10 status: PARTIAL. Submission verdict: NOT READY for final sign-off** until public publication and submission instructions are confirmed and these documented compatibility risks are reviewed. No critical runtime defect was established. A fresh MongoDB 6/7 or clean-clone dependency installation was not performed; installed Python 3.13 execution and Python 3.11 syntax were verified separately. No MongoDB installation, live connection or benchmark repeat was attempted.
+**Submission verdict: Ready for candidate submission, subject to completing official form requirements.** Hidden-grader behavior and clean-environment compatibility are not independently verified. The historical Phase 10 audit retains its qualified findings in REVIEW.md. No critical runtime defect was established. A fresh MongoDB 6/7 or clean-clone dependency installation was not performed; installed Python 3.13 execution and Python 3.11 syntax were verified separately. No MongoDB installation, live connection or benchmark repeat was attempted.
