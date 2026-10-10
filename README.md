@@ -2,7 +2,7 @@
 
 HROne trainee assignment backend using Python, FastAPI, Pydantic and PyMongo. All application code is in [app/main.py](app/main.py). The service manages employees, attendance, atomic corrections with audit history, four MongoDB analytics reports and five explain targets.
 
-**Status:** Phases 1-8 complete; Phase 9 audit completed with qualified submission readiness. **218 offline tests passed, zero failures.** Saved Phase 8 verification passed on 100,000 attendance fixture documents and 1,050 employees, with 111 HTTP requests and successful owned-database cleanup. Phase 10 awaits user review. See [REVIEW.md](REVIEW.md) for the compliance matrix, security review and limitations, and [DECISIONS.md](DECISIONS.md) for the five required concise answers.
+**Status:** Phases 1-8 complete; Phase 9 and Phase 10 audits completed with qualified submission readiness. **218 offline tests passed, zero failures.** Saved Phase 8 verification passed on 100,000 attendance fixture documents and 1,050 employees, with 111 HTTP requests and successful owned-database cleanup. Final submission awaits user review and public-publication verification. See [REVIEW.md](REVIEW.md) for the compliance matrix, security review and limitations, and [DECISIONS.md](DECISIONS.md) for the five required concise answers.
 
 ## Setup and running
 
@@ -31,6 +31,8 @@ Activate the environment and use the required assignment command:
 .\.venv\Scripts\Activate.ps1
 uvicorn app.main:app --port 8000
 ```
+
+If PowerShell activation is unavailable, the equivalent interpreter-specific command is `.\.venv\Scripts\python.exe -m uvicorn app.main:app --port 8000`; the official command above remains supported.
 
 Startup pings MongoDB, audits duplicate natural keys and creates all seven indexes idempotently. It never repairs or reseeds records. Health readiness must complete within 20 seconds. Swagger UI: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs); generated schema: `/openapi.json`. Try read requests first; Swagger write requests affect the selected MONGO_DB.
 
@@ -87,7 +89,7 @@ Offline command (no live database operations):
 .\.venv\Scripts\python.exe -B -m unittest discover -s tests -v
 ```
 
-Current audit: **218 passed, 0 failed**, 17.578 seconds; pip check passed. Isolated doubles do not prove server behavior; saved live reports supply separate evidence.
+Phase 10 audit: **218 passed, 0 failed, 0 skipped**, 17.841 seconds; pip check passed. Isolated doubles do not prove server behavior; saved live reports supply separate evidence.
 
 | Phase | Saved PASS checks | HTTP requests | Startup | Report |
 |---|---:|---:|---:|---|
@@ -118,7 +120,7 @@ RSS snapshots were 75,833,344 and 77,885,440 bytes; peak memory remains NOT MEAS
 
 ### Optional verification tools
 
-No live rerun was performed in Phase 9. A Phase 3-7 harness can be manually selected using `python -B tests/final_phaseN_verification.py`; it starts an owned server on a dynamic localhost port, verifies PID/database/token, writes only its collision-checked temporary database and checks development snapshots before exact-owner cleanup. Live execution needs separate approval and database permissions.
+No live rerun was performed in Phase 9 or Phase 10. A Phase 3-7 harness can be manually selected using `python -B tests/final_phaseN_verification.py`; it starts an owned server on a dynamic localhost port, verifies PID/database/token, writes only its collision-checked temporary database and checks development snapshots before exact-owner cleanup. Live execution needs separate approval and database permissions.
 
 Phase 8's default command only prints an offline plan:
 
@@ -132,4 +134,11 @@ Phase 8's default command only prints an offline plan:
 
 There is no authentication, holiday calendar, global payload cap or ingress rate limiting in the assignment. regularized_by is free text. Audit history and leaderboard tie responses can grow; listing limits bound document count, not response bytes. Peak memory, clean-clone MongoDB 7 execution and hidden grader results are unverified. A literal IXSCAN-only checker or strict unredacted-explain checker may differ from the accepted modern-stage/redaction interpretation; these caveats are documented rather than hidden. Changes to pipelines/indexes or production security controls need separate review and approval.
 
-Submit the original required runtime and documentation files in a public Git repository: app/main.py, requirements.txt, REVIEW.md, DECISIONS.md and README.md. Preserve the official contract and model, single-file runtime and required launch command. Exclude .env, credentials, virtual environments, private dumps, capacity files, caches and Dockerfiles. Phase 9 did not stage, commit, push, modify the remote or submit anything; Phase 10 is awaiting user review.
+Submit the original required runtime and documentation files in a public Git repository: app/main.py, requirements.txt, REVIEW.md, DECISIONS.md and README.md. Preserve the official contract and model, single-file runtime and required launch command. Exclude .env, credentials, virtual environments, private dumps, capacity files, caches and Dockerfiles. Neither final audit staged, committed, pushed, modified the remote or submitted anything. Phase 10 is complete and awaits user review. The original assessment requires a public repository and submission by the deadline/method in the invitation email; the email deadline was not supplied, and public visibility could not be independently verified. Confirm both before submission.
+
+
+### Final compatibility verdict
+
+The five explain response envelopes satisfy the original required fields (`endpoint`, `collection`, `explain`); metadata removal does not delete any mandatory schema field. The prose request for raw output still has the documented user-approved redaction exception. MongoDB documents EXPRESS_IXSCAN as a real optimized index scan introduced in 8.0; stages are preserved exactly, and no fake IXSCAN or hint was added. A hidden literal-stage or complete-document-equality checker remains unknown. See [Phase 10 findings](REVIEW.md#phase-10-final-verification) for primary sources and final qualifications.
+
+**Phase 10 status: PARTIAL. Submission verdict: NOT READY for final sign-off** until public publication and submission instructions are confirmed and these documented compatibility risks are reviewed. No critical runtime defect was established. A fresh MongoDB 6/7 or clean-clone dependency installation was not performed; installed Python 3.13 execution and Python 3.11 syntax were verified separately. No MongoDB installation, live connection or benchmark repeat was attempted.
