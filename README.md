@@ -25,9 +25,9 @@ MongoDB **6.0 or newer** is required (the grader uses 7.0). MongoDB Atlas free t
 A public Git repository with `app/main.py`, `requirements.txt`, `REVIEW.md`, `DECISIONS.md` and a short `README.md`.
 No `.env`, no secrets, no Dockerfile.
 
-## Phase 5 status and verification
+## Phase 6 status and verification
 
-Employee APIs, attendance listing/punch-in/punch-out/correction, and four MongoDB analytics APIs are implemented (11 operations). Phase 6 admin explain remains unimplemented. Run isolated tests from this directory:
+Employee APIs, attendance listing/punch-in/punch-out/correction, four MongoDB analytics APIs and the contract-restricted admin explain API are implemented (12 operations). Run isolated tests from this directory:
 
 ```powershell
 .\.venv\Scripts\python.exe -B -m unittest discover -s tests -v
@@ -36,7 +36,9 @@ Employee APIs, attendance listing/punch-in/punch-out/correction, and four MongoD
 For **manual, opt-in** Atlas integration using an owned temporary test database:
 
 ```powershell
-.\.venv\Scripts\python.exe -B tests/final_phase5_verification.py
+.\.venv\Scripts\python.exe -B tests/final_phase6_verification.py
 ```
 
-The verifier reads `attendance_db` for before/after snapshots; fixture writes and verified cleanup target only its unique owned `hrone_p5v_` database. It does not run the seed script. Phase 5 live integration has **not been executed**. The saved Phase 4 run passed 68 HTTP requests and measured 3.627-second startup with five indexes; Phase 5 adds two indexes and needs its own measurement. Current isolated verification: **123 passed, 0 failed**. See `REVIEW.md` and `DECISIONS.md` for rules, test limitations and evidence.
+The verifier reads `attendance_db` for before/after snapshots; fixture writes and verified cleanup target only its unique owned `hrone_p6v_` database. It does not run the seed script. The saved Phase 5 run passed 16 checks and 85 HTTP requests, measured 2.55-second startup, verified seven indexes and preserved development data. Phase 6 live verification has **not been executed**; its manual run reports real plans and execution statistics but does not establish 100k-record performance. Current isolated verification: **144 passed, 0 failed**. See `REVIEW.md` and `DECISIONS.md` for evidence and limitations.
+
+`GET /admin/explain/{endpoint}` supports only `attendance_list`, `employee_monthly`, `department_summary`, `late_leaderboard`, and `department_trend`. Pass the target's query parameters (monthly: `emp_code`/`month`; trend: `department`/`from`/`to`). It returns real MongoDB `executionStats` output with deployment metadata redacted; arbitrary commands, pipelines and collections are rejected.

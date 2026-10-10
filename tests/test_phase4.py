@@ -362,7 +362,7 @@ class Phase4Tests(unittest.TestCase):
         name = harness.generate_database_name("a" * 32, phase=4)
         self.assertEqual(len(name.encode("utf-8")), 35)
         harness.guard_database(name, name)
-        for phase in (2, 6):
+        for phase in (2, 7):
             with self.assertRaises(RuntimeError):
                 harness.generate_database_name("a" * 32, phase=phase)
         with self.assertRaises(RuntimeError):

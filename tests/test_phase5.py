@@ -215,7 +215,7 @@ class Phase5Tests(unittest.TestCase):
             self.assertNotIn("$out", json.dumps(stages))
             self.assertNotIn("$merge", json.dumps(stages))
 
-    def test_schema_operation_ids_parameters_and_no_admin_endpoint(self):
+    def test_schema_operation_ids_parameters_and_contract_admin_endpoint(self):
         actual = main.app.openapi()
         for path, expected in self.contract["paths"].items():
             if not path.startswith("/analytics"): continue
@@ -224,7 +224,7 @@ class Phase5Tests(unittest.TestCase):
             self.assertEqual(set(operation["responses"]), set(expected["get"]["responses"]))
             parameters = [self.contract["components"]["parameters"][p["$ref"].split("/")[-1]] if "$ref" in p else p for p in expected["get"]["parameters"]]
             self.assertEqual({(p["name"], p["in"]) for p in operation["parameters"]}, {(p["name"], p["in"]) for p in parameters})
-        self.assertFalse(any(path.startswith("/admin") for path in actual["paths"]))
+        self.assertEqual({path for path in actual["paths"] if path.startswith("/admin")}, {"/admin/explain/{endpoint}"})
 
     def test_database_outage_stays_sanitized(self):
         self.db.employees.error = OperationFailure("private connection details", code=13)
@@ -274,7 +274,7 @@ class Phase5Tests(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             harness.guard_database(name, name[:-1] + "b")
         with self.assertRaises(RuntimeError):
-            harness.generate_database_name("a" * 32, phase=6)
+            harness.generate_database_name("a" * 32, phase=7)
 
     def test_trend_four_decimal_half_up_tie(self):
         # 1 / 32 = .03125: half-up must give .0313 rather than .0312.

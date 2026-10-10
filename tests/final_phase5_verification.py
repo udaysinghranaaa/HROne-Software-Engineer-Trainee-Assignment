@@ -12,8 +12,8 @@ import final_phase3_verification as harness
 from phase5_fixtures import fixture_data, monthly_expected, summary_expected, leaderboard_expected, trend_expected
 
 
-def seed_owned_fixtures(database):
-    assert database.name.startswith("hrone_p5v_"), "Phase 5 needs its own database"
+def seed_owned_fixtures(database, phase=5):
+    assert phase in (5, 6) and database.name.startswith(f"hrone_p{phase}v_"), "Fixture phase/database mismatch"
     harness.guard_database(database.name, database.name)
     owner = database["_verification_owner"].find_one({"_id": "owner"})
     assert owner and owner.get("database") == database.name and isinstance(owner.get("run_token"), str) and re.fullmatch(r"[0-9a-f]{32}", owner["run_token"]), "Fixture ownership missing"

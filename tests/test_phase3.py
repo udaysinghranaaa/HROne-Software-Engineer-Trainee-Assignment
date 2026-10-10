@@ -540,7 +540,7 @@ class Phase3Tests(unittest.TestCase):
                                       ("POST", "/attendance/punch-in"), ("GET", "/attendance"),
                                       ("POST", "/attendance/punch-out"), ("PATCH", "/attendance/{emp_code}/{date}"),
                                       ("GET", "/analytics/employees/{emp_code}/monthly"), ("GET", "/analytics/departments/summary"),
-                                      ("GET", "/analytics/leaderboard/late"), ("GET", "/analytics/departments/{department}/trend")})
+                                      ("GET", "/analytics/leaderboard/late"), ("GET", "/analytics/departments/{department}/trend"), ("GET", "/admin/explain/{endpoint}")})
         self.assertEqual(set(main.EmployeeIn.model_fields), {"emp_code", "name", "email", "department", "shift_start", "shift_end", "joined_on"})
         self.assertEqual(set(main.PunchInIn.model_fields), {"emp_code", "punched_at", "status"})
         employee = schema["paths"]["/employees"]

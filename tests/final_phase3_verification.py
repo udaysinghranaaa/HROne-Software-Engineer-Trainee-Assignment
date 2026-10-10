@@ -37,14 +37,14 @@ RESULT_FILE = ROOT / "tests/phase3_final_results.json"
 def guard_database(name, expected):
     if len(name.encode("utf-8")) > 38:
         raise RuntimeError("Test database name exceeds the 38-byte safety limit")
-    if name != expected or not re.fullmatch(r"hrone_p[345]v_[0-9]{8}_[0-9a-f]{16}", name):
+    if name != expected or not re.fullmatch(r"hrone_p[3456]v_[0-9]{8}_[0-9a-f]{16}", name):
         raise RuntimeError("Unsafe test database identity; refusing writes or cleanup")
     if name == "attendance_db":
         raise RuntimeError("Development database must never be a write target")
 
 
 def generate_database_name(token, phase=3):
-    if phase not in (3, 4, 5):
+    if phase not in (3, 4, 5, 6):
         raise RuntimeError("Unsupported verification phase")
     name = f"hrone_p{phase}v_" + datetime.now(IST).strftime("%Y%m%d") + "_" + token[:16]
     guard_database(name, name)
@@ -319,6 +319,8 @@ def run_verification(extra_checks=None, phase=3):
                 contract_path = "/analytics/employees/{emp_code}/monthly"
             elif path.startswith("/analytics/departments/") and path.endswith("/trend"):
                 contract_path = "/analytics/departments/{department}/trend"
+            if path.startswith("/admin/explain/"):
+                contract_path = "/admin/explain/{endpoint}"
             response_schema = contract["paths"][contract_path][method.lower()]["responses"][str(status)]
             if "$ref" in response_schema:
                 response_schema = contract["components"]["responses"][response_schema["$ref"].split("/")[-1]]
@@ -338,7 +340,7 @@ def run_verification(extra_checks=None, phase=3):
                         ("post", "/attendance/punch-in"), ("get", "/attendance"),
                         ("post", "/attendance/punch-out"), ("patch", "/attendance/{emp_code}/{date}"),
                         ("get", "/analytics/employees/{emp_code}/monthly"), ("get", "/analytics/departments/summary"),
-                        ("get", "/analytics/leaderboard/late"), ("get", "/analytics/departments/{department}/trend")}
+                        ("get", "/analytics/leaderboard/late"), ("get", "/analytics/departments/{department}/trend"), ("get", "/admin/explain/{endpoint}")}
         assert {(method, path) for path, item in actual["paths"].items() for method in item} == expected_ops
         for method, path in expected_ops:
             assert actual["paths"][path][method]["operationId"] == contract["paths"][path][method]["operationId"]

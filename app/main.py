@@ -9,6 +9,7 @@ works, but nobody has reviewed it. Read PROBLEM_STATEMENT.docx for what is expec
 openapi.yaml for the contract and DATA_MODEL.md for what is stored in MongoDB.
 """
 import os
+import json
 import calendar
 from contextlib import asynccontextmanager
 from datetime import date, datetime, time, timedelta, timezone
@@ -16,7 +17,8 @@ from decimal import Decimal, ROUND_HALF_UP
 from typing import Annotated, Literal, Optional
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Path, Query
+from fastapi import FastAPI, HTTPException, Path, Query, Request
+from bson import json_util
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field, model_validator
@@ -487,15 +489,8 @@ def punch_in(body: PunchInIn):
     return serialize_attendance(doc)
 
 
-@app.get("/attendance", response_model=AttendancePage, operation_id="listAttendance")
-def list_attendance(
-    emp_code: Optional[str] = None,
-    date_from: Annotated[Optional[CalendarDate], Query()] = None,
-    date_to: Annotated[Optional[CalendarDate], Query()] = None,
-    status: Optional[Status] = None,
-    page: Annotated[int, Query(ge=1)] = 1,
-    page_size: Annotated[int, Query(ge=1, le=100)] = 20,
-):
+def attendance_query(emp_code=None, date_from=None, date_to=None, status=None, page=1, page_size=20):
+    """Shared main find command; listing counts the identical filter separately."""
     if date_from is not None and date_to is not None and date_from > date_to:
         raise RequestValidationError([{"type": "value_error", "loc": ("query", "date_to"),
                                        "msg": "date_to must be on or after date_from", "input": date_to}])
@@ -510,18 +505,28 @@ def list_attendance(
             q["date"]["$lte"] = date_to
     if status is not None:
         q["status"] = status
-    total = db.attendance_logs.count_documents(q)
-    cursor = (db.attendance_logs.find(q, {"_id": 0})
-              .sort([("date", -1), ("emp_code", 1)])
-              .skip((page - 1) * page_size).limit(page_size))
+    return {"find": "attendance_logs", "filter": q, "projection": {"_id": 0},
+            "sort": {"date": -1, "emp_code": 1}, "skip": (page - 1) * page_size, "limit": page_size}
+
+
+@app.get("/attendance", response_model=AttendancePage, operation_id="listAttendance")
+def list_attendance(
+    emp_code: Optional[str] = None,
+    date_from: Annotated[Optional[CalendarDate], Query()] = None,
+    date_to: Annotated[Optional[CalendarDate], Query()] = None,
+    status: Optional[Status] = None,
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=100)] = 20,
+):
+    command = attendance_query(emp_code, date_from, date_to, status, page, page_size)
+    total = db.attendance_logs.count_documents(command["filter"])
+    cursor = (db.attendance_logs.find(command["filter"], command["projection"])
+              .sort(list(command["sort"].items()))
+              .skip(command["skip"]).limit(command["limit"]))
     page_docs = [serialize_attendance(doc) for doc in cursor]
     return {"items": page_docs, "total": total, "page": page, "page_size": page_size}
 
 
-# --------------------------------------------------------------------------- #
-# TODO - later phases of the contract (see openapi.yaml):
-#   GET   /admin/explain/{endpoint}
-# --------------------------------------------------------------------------- #
 
 
 @app.post("/attendance/punch-out", response_model=AttendanceRecord, operation_id="punchOut",
@@ -758,11 +763,103 @@ def late_leaderboard(month: Annotated[CalendarMonth, Query()], limit: Annotated[
          responses={404: {"model": ErrorResponse}})
 def department_trend(department: str, date_from: Annotated[CalendarDate, Query(alias="from")],
                      date_to: Annotated[CalendarDate, Query(alias="to")]):
-    days = (date.fromisoformat(date_to) - date.fromisoformat(date_from)).days + 1
-    if not 1 <= days <= 92:
-        raise RequestValidationError([{"type": "value_error", "loc": ("query", "to"),
-                                       "msg": "range must contain 1 to 92 calendar days", "input": date_to}])
+    validate_trend_range(date_from, date_to)
     rows = list(db.employees.aggregate(trend_pipeline(department, date_from, date_to)))
     if not rows:
         raise HTTPException(404, "department not found")
     return {"department": department, "items": rows}
+
+
+def validate_trend_range(date_from, date_to):
+    days = (date.fromisoformat(date_to) - date.fromisoformat(date_from)).days + 1
+    if not 1 <= days <= 92:
+        raise RequestValidationError([{"type": "value_error", "loc": ("query", "to"),
+                                       "msg": "range must contain 1 to 92 calendar days", "input": date_to}])
+
+# The explain API accepts only these five read operations, never caller commands.
+ExplainTarget = Literal['attendance_list', 'employee_monthly', 'department_summary', 'late_leaderboard', 'department_trend']
+
+
+class ExplainResponse(BaseModel):
+    endpoint: str
+    collection: str
+    explain: dict
+
+
+def explain_required(parameters, *names):
+    errors = [{'type': 'missing', 'loc': ('query', name), 'msg': 'Field required', 'input': None}
+              for name in names if parameters.get(name) is None]
+    if errors:
+        raise RequestValidationError(errors)
+
+
+def explain_query(endpoint: ExplainTarget, parameters):
+    """Return exactly the main production command, without running a resource lookup."""
+    if endpoint == 'attendance_list':
+        return attendance_query(**{name: parameters[name] for name in
+            ('emp_code', 'date_from', 'date_to', 'status', 'page', 'page_size')})
+    if endpoint == 'employee_monthly':
+        explain_required(parameters, 'emp_code', 'month')
+        collection, stages = 'employees', monthly_pipeline(parameters['emp_code'], parameters['month'])
+    elif endpoint == 'department_summary':
+        explain_required(parameters, 'month')
+        collection, stages = 'employees', department_summary_pipeline(parameters['month'], parameters['department'])
+    elif endpoint == 'late_leaderboard':
+        explain_required(parameters, 'month')
+        collection, stages = 'attendance_logs', leaderboard_pipeline(parameters['month'], parameters['limit'], parameters['department'])
+    elif endpoint == 'department_trend':
+        explain_required(parameters, 'department', 'from', 'to')
+        validate_trend_range(parameters['from'], parameters['to'])
+        collection, stages = 'employees', trend_pipeline(parameters['department'], parameters['from'], parameters['to'])
+    else:
+        raise ValueError('Unsupported explain target')
+    return {'aggregate': collection, 'pipeline': stages, 'cursor': {}}
+
+
+# User-approved exception to raw output: remove deployment metadata, retain plans/stats.
+EXPLAIN_PRIVATE_FIELDS = frozenset({'serverInfo', 'serverParameters', '$clusterTime', 'operationTime',
+                                   'host', 'hosts', 'hostname', 'connectionString', 'uri', 'password'})
+
+
+def explain_json(document):
+    def redact(value):
+        if isinstance(value, dict):
+            return {key: redact(item) for key, item in value.items() if key not in EXPLAIN_PRIVATE_FIELDS}
+        if isinstance(value, list):
+            return [redact(item) for item in value]
+        return value
+    if not isinstance(document, dict):
+        raise HTTPException(503, 'MongoDB unavailable')
+    try:
+        return json.loads(json_util.dumps(redact(document), json_options=json_util.RELAXED_JSON_OPTIONS))
+    except (TypeError, ValueError, OverflowError):
+        raise HTTPException(503, 'MongoDB unavailable') from None
+
+
+@app.get('/admin/explain/{endpoint}', response_model=ExplainResponse, operation_id='explainEndpoint')
+def explain_endpoint(
+    request: Request, endpoint: ExplainTarget,
+    emp_code: Optional[str] = None,
+    month: Annotated[Optional[CalendarMonth], Query()] = None,
+    department: Optional[str] = None,
+    limit: Annotated[int, Query(ge=1, le=50)] = 10,
+    date_from: Annotated[Optional[CalendarDate], Query()] = None,
+    date_to: Annotated[Optional[CalendarDate], Query()] = None,
+    status: Optional[Status] = None,
+    trend_from: Annotated[Optional[CalendarDate], Query(alias='from')] = None,
+    trend_to: Annotated[Optional[CalendarDate], Query(alias='to')] = None,
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=100)] = 20,
+):
+    parameters = dict(emp_code=emp_code, month=month, department=department, limit=limit,
+                      date_from=date_from, date_to=date_to, status=status, page=page, page_size=page_size)
+    parameters.update({'from': trend_from, 'to': trend_to})
+    extra = set(request.query_params) - parameters.keys()
+    if extra:
+        # Do not echo arbitrary caller payloads in error details.
+        raise RequestValidationError([{'type': 'extra_forbidden', 'loc': ('query',),
+                                       'msg': 'Unsupported query parameter', 'input': None}])
+    command = explain_query(endpoint, parameters)
+    result = db.command({'explain': command, 'verbosity': 'executionStats'})
+    return {'endpoint': endpoint, 'collection': command.get('find', command.get('aggregate')),
+            'explain': explain_json(result)}
