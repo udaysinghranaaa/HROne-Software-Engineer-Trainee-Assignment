@@ -26,6 +26,7 @@ from urllib.request import Request, urlopen
 
 from bson import BSON
 from pymongo.errors import PyMongoError
+from dotenv import load_dotenv
 import yaml
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -34,10 +35,15 @@ IST = timezone(timedelta(hours=5, minutes=30))
 RESULT_FILE = ROOT / "tests/phase3_final_results.json"
 
 
+def load_configuration():
+    """Resolve the kit's .env independently of cwd; explicit environment wins."""
+    load_dotenv(dotenv_path=ROOT / ".env", override=False)
+
+
 def guard_database(name, expected):
     if len(name.encode("utf-8")) > 38:
         raise RuntimeError("Test database name exceeds the 38-byte safety limit")
-    if name != expected or not re.fullmatch(r"hrone_p[34567]v_[0-9]{8}_[0-9a-f]{16}", name):
+    if name != expected or not re.fullmatch(r"hrone_p[345678]v_[0-9]{8}_[0-9a-f]{16}", name):
         raise RuntimeError("Unsafe test database identity; refusing writes or cleanup")
     if name == "attendance_db":
         raise RuntimeError("Development database must never be a write target")
@@ -173,6 +179,7 @@ async def serve_child(args, diagnostics):
 
 def child_process_configuration(name):
     guard_database(name, name)
+    load_configuration()
     env = os.environ.copy()
     env["MONGO_DB"] = name
     env["MONGO_URI"] = os.getenv("MONGO_URI", "mongodb://localhost:27017")
@@ -239,10 +246,11 @@ def validate_schema(contract, schema, value):
         assert value <= schema["maximum"], "Response numeric maximum violated"
 
 
-def run_verification(extra_checks=None, phase=3):
+def run_verification(extra_checks=None, phase=3, name_factory=None):
+    load_configuration()
     from app import main
     token = uuid.uuid4().hex
-    name = generate_database_name(token) if phase == 3 else generate_database_name(token, phase=phase)
+    name = name_factory(token) if name_factory else generate_database_name(token, phase=phase)
     guard_database(name, name)
     result = {"database": name, "date_ist": datetime.now(IST).isoformat(),
               "checks": {}, "http_requests": 0, "status": "BLOCKED"}
@@ -348,6 +356,9 @@ def run_verification(extra_checks=None, phase=3):
         passed("registered_contract")
 
         codes = sorted({"EMP" + str(secrets.randbelow(900000) + 100000) for _ in range(10)})[:3]
+        if phase == 8:
+            # Disjoint from deterministic Phase 8 fixture and write-probe codes.
+            codes = ["EMP700001", "EMP700002", "EMP700003"]
         assert len(codes) == 3
         def employee(code, department="QA", **extra):
             return {"emp_code": code, "name": "Phase 3 QA " + token[:8], "email": token[:8] + "@example.com",
@@ -483,6 +494,9 @@ def run_verification(extra_checks=None, phase=3):
             indexes.append({"collection": collection, "name": index_name, "keys": fields, "unique": unique})
         passed("indexes_and_repeated_setup", indexes=indexes)
         if extra_checks is not None:
+            http.server_pid = process.pid
+            http.ownership_token = token
+            http.database_name = name
             guard_database(database.name, name)
             operation = "_verification_owner.find_one.before_extra_checks"
             assert database["_verification_owner"].find_one({"_id": "owner"}) == {

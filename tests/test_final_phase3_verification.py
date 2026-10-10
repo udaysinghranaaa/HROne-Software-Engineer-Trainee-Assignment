@@ -19,6 +19,68 @@ import final_phase3_verification as harness
 
 
 class HarnessSafetyTests(unittest.TestCase):
+    @contextlib.contextmanager
+    def configuration_fixture(self, environment=None, contents=None):
+        # Synthetic values only; never read the real project .env in these tests.
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            if contents is not None:
+                (root / ".env").write_text(contents, encoding="utf-8")
+            with patch.object(harness, "ROOT", root), patch.dict(os.environ, environment or {}, clear=True):
+                yield root
+
+    def test_project_dotenv_loads_parent_configuration(self):
+        with self.configuration_fixture(contents="MONGO_URI=mongodb://configured.invalid\nMONGO_DB=fixture_db\n"):
+            self.assertNotIn("MONGO_URI", os.environ)
+            harness.load_configuration()
+            self.assertEqual(os.environ["MONGO_URI"], "mongodb://configured.invalid")
+            self.assertEqual(os.environ["MONGO_DB"], "fixture_db")
+
+    def test_explicit_environment_overrides_project_dotenv(self):
+        with self.configuration_fixture({"MONGO_URI": "mongodb://explicit.invalid", "MONGO_DB": "explicit_db"},
+                "MONGO_URI=mongodb://configured.invalid\nMONGO_DB=fixture_db\n"):
+            harness.load_configuration()
+            self.assertEqual(os.environ["MONGO_URI"], "mongodb://explicit.invalid")
+            self.assertEqual(os.environ["MONGO_DB"], "explicit_db")
+
+    def test_child_inherits_loaded_parent_uri_and_owned_database(self):
+        name = "hrone_p8v_20261010_0123456789abcdef"
+        with self.configuration_fixture(contents="MONGO_URI=mongodb://configured.invalid\nMONGO_DB=attendance_db\n"):
+            _, env = harness.child_process_configuration(name)
+            self.assertEqual(env["MONGO_URI"], os.environ["MONGO_URI"])
+            self.assertEqual(env["MONGO_DB"], name)
+            self.assertEqual(os.environ["MONGO_DB"], "attendance_db")
+
+    def test_child_explicit_uri_is_not_overridden(self):
+        name = "hrone_p8v_20261010_0123456789abcdef"
+        with self.configuration_fixture({"MONGO_URI": "mongodb://explicit.invalid"},
+                "MONGO_URI=mongodb://configured.invalid\n"):
+            _, env = harness.child_process_configuration(name)
+            self.assertEqual(env["MONGO_URI"], "mongodb://explicit.invalid")
+
+    def test_configuration_uses_absolute_project_path_and_no_override(self):
+        with patch.object(harness, "load_dotenv") as loader:
+            harness.load_configuration()
+        loader.assert_called_once_with(dotenv_path=harness.ROOT / ".env", override=False)
+        self.assertTrue(harness.ROOT.is_absolute())
+
+    def test_missing_dotenv_retains_local_default(self):
+        with self.configuration_fixture():
+            _, env = harness.child_process_configuration("hrone_p8v_20261010_0123456789abcdef")
+            self.assertEqual(env["MONGO_URI"], "mongodb://localhost:27017")
+
+    def test_parent_entry_loads_configuration_before_connect(self):
+        def connect():
+            self.assertEqual(os.environ["MONGO_URI"], "mongodb://configured.invalid")
+            raise RuntimeError("Isolated stop before connection")
+        main = SimpleNamespace(connect_database=MagicMock(side_effect=connect))
+        with self.configuration_fixture(contents="MONGO_URI=mongodb://configured.invalid\n") as root, \
+                patch.dict("sys.modules", {"app": SimpleNamespace(main=main)}), \
+                patch.object(harness, "RESULT_FILE", root / "results.json"), \
+                contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(harness.run_verification(), 1)
+            main.connect_database.assert_called_once()
+
     def test_generated_name_preserves_date_and_random_identifier(self):
         token = "0123456789abcdef" * 2
         name = harness.generate_database_name(token)

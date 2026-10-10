@@ -2,7 +2,7 @@
 
 A FastAPI and MongoDB backend for the HROne Software Engineer Trainee assignment. Employees can punch in and out, managers can correct attendance with an audit trail, and MongoDB aggregation reports provide monthly summaries, department totals, late rankings and daily trends. The Admin Explain API exposes real query execution plans for the five contract-supported read operations.
 
-**Status:** Phases 1–6 complete; all 12 required API operations implemented. The Phase 7 isolated suite passed **174 tests**, and Phase 6 live integration passed **14 checks / 62 HTTP requests**. Phase 7 QA implementation is complete with live verification pending; Phases 8–10 remain pending. **100,000-record performance and grader-scale query-plan acceptance are not verified.**
+**Status:** Phases 1-7 complete; all 12 APIs implemented. Saved Phase 7 live verification passed 21 checks / 120 HTTP requests, startup 3.92 seconds. Phase 8 benchmark tooling is prepared; 100,000-record performance acceptance remains NOT MEASURED. Phases 9-10 pending.
 
 ## Specification and review documents
 
@@ -250,7 +250,7 @@ Phase 6 verified seven application indexes and all five explain targets. The rep
 
 **174 tests passed, zero failures**: all previous 144 tests plus 30 advanced tests covering five-way races, correction retry/history chains, cross-month/year overnight shifts, generated duration/calendar boundaries, all-route error schemas and modern explain stages. The complete Phase 7 verifier callback was tested with fake storage/HTTP; this does not establish real Atlas concurrency or cleanup.
 
-The confirmed fix is in the verification classifier: `EXPRESS_IXSCAN` and explicit documented read-index equivalents now count as indexed access; unknown stage names do not. Genuine collection scans and rejected-plan exclusions remain covered. Application code and the seven indexes are unchanged. See [the Phase 7 coverage matrix](REVIEW.md#requirements-to-tests-coverage-matrix) and contract catalog for requirement-level evidence. Phase 7 live startup/concurrency/cleanup and 100k acceptance remain **NOT TESTED**.
+The confirmed fix is in the verification classifier: `EXPRESS_IXSCAN` and explicit documented read-index equivalents now count as indexed access; unknown stage names do not. Genuine collection scans and rejected-plan exclusions remain covered. Application code and the seven indexes are unchanged. See [the Phase 7 coverage matrix](REVIEW.md#requirements-to-tests-coverage-matrix) and contract catalog for requirement-level evidence. Saved Phase 7 live startup/concurrency/cleanup passed; 100k acceptance remains **NOT MEASURED**.
 
 ### Optional manual live reruns
 
@@ -261,7 +261,7 @@ Run only when intentionally verifying against the configured MongoDB deployment:
 .\.venv\Scripts\python.exe -B tests/final_phase4_verification.py
 .\.venv\Scripts\python.exe -B tests/final_phase5_verification.py
 .\.venv\Scripts\python.exe -B tests/final_phase6_verification.py
-# Prepared Phase 7 harness; has not been executed against Atlas:
+# Phase 7 harness; saved live run passed:
 .\.venv\Scripts\python.exe -B tests/final_phase7_verification.py
 ```
 
@@ -277,8 +277,9 @@ Each harness launches an isolated child server on a dynamically bound localhost 
 | 4 | Punch-out, corrections and atomic audit updates — complete |
 | 5 | Four aggregation analytics APIs — complete |
 | 6 | Admin Explain API and live fixture verification — complete |
-| 7 | Advanced isolated QA and explain-detector fix complete; manual live verification NOT TESTED |
-| 8–10 | Pending; not started as part of this work |
+| 7 | Advanced QA complete; 174 isolated tests and 21 live checks passed |
+| 8 | Benchmark tooling prepared; 100k live acceptance NOT MEASURED |
+| 9-10 | Pending; not started |
 
 The **100,000-record workload remains unverified**: current live fixtures do not establish throughput, latency, query-plan stability or the grader's IXSCAN/no-COLLSCAN acceptance at that scale. Phase 6's saved trend plan reports `EXPRESS_IXSCAN`, supporting indexes and no collection scan; the historical verifier's literal `IXSCAN` flag was false for that target. Phase 7 fixes this detector using an explicit documented read-index-stage allowlist; the original report is preserved. Overall integration PASS must not be read as large-dataset acceptance. Further performance work remains pending.
 
@@ -287,3 +288,32 @@ There is no authentication or holiday calendar in the assignment. `regularized_b
 ## Submission requirements
 
 Submit a public Git repository containing `app/main.py`, `requirements.txt`, `REVIEW.md`, `DECISIONS.md` and this README. Keep all application code in `app/main.py` and preserve the required launch command and original contract. Do not include `.env`, credentials, virtual environments, data dumps or a Dockerfile. Retain the original assignment files and sample document shapes; the hidden evaluator uses additional cases and a much larger dataset.
+
+
+## Phase 8: manual 100k benchmark
+
+Preparation only; no live benchmark has been executed. See [performance acceptance and safety details](REVIEW.md#phase-8-performance-acceptance-and-preparation) and [decisions](DECISIONS.md#phase-8-benchmark-decisions). The deterministic fixture has 100,000 attendance documents and 1,050 employees, generated in <=100-document batches. All 12 APIs, five explain targets, pagination, independent analytics probes, two-client races, RSS snapshots and two full-data startup measurements are covered by the manual tool. No numeric latency requirement is invented.
+
+Offline plan (safe, no MongoDB connection):
+
+```powershell
+.\.venv\Scripts\python.exe -B tests/final_phase8_verification.py
+```
+
+**Only after explicit user approval**, inspect tier and total deployment headroom in Atlas UI. Create a local `tests/phase8_capacity.local.json` (do not commit it) containing exactly these fields; replace the available bytes and timestamp with observed values for the same configured deployment:
+
+```json
+{"tier":"M0","available_bytes":0,"verified_at":"REPLACE_WITH_CURRENT_UTC_ISO_TIMESTAMP","same_deployment":true,"source":"Atlas UI"}
+```
+
+`FLEX` is also supported. Zero capacity and the placeholder timestamp deliberately fail the gate. The offline plan prints the advisory minimum budget (currently 94,281,167 bytes); actual capacity is not inferred from this estimate. The attestation must be within 24 hours. Recheck Atlas immediately before execution. If capacity is inadequate, do not run or silently shrink the workload. No tier, permission or billing changes are automated.
+
+Approved manual live command, from candidate_kit:
+
+```powershell
+.\.venv\Scripts\python.exe -B tests/final_phase8_verification.py --approve-100k --capacity-file tests/phase8_capacity.local.json
+```
+
+Allow roughly 33 minutes for paced attendance insertion, plus tests (advisory one-hour operation budget). One owned temporary database is created and cleaned up after exact ownership verification; `attendance_db` receives no writes. The report is saved as `tests/phase8_final_results.json`. The parent initially creates seven small attendance probes, so total collection counts exceed the exactly-100k benchmark fixture. Failed plans remain evidence for review, not a reason to add speculative hints/indexes. A cleanup failure leaves the exact temporary identity in the sanitized report; investigate ownership read-only before any manual remediation. No 100k live latency, startup, memory or plan result is currently claimed.
+
+Phase 8 offline verification: **211 automated tests passed, zero failures** (174 retained plus 37 Phase 8 tests). The default offline planning command reported zero live inserts and cleanup NOT_NEEDED. Full live execution requires separate user approval and the capacity gate described above.

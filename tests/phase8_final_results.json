@@ -1,0 +1,1069 @@
+{
+  "database": "hrone_p8v_20261010_d94a6c41618d4444",
+  "date_ist": "2026-10-10T15:12:25.189299+05:30",
+  "checks": {
+    "cold_startup": {
+      "status": "PASS",
+      "seconds": 2.363,
+      "limit_seconds": 20,
+      "includes": "process spawn, imports, fresh MongoDB connection, new indexes, bind and health ping"
+    },
+    "health": {
+      "status": "PASS"
+    },
+    "registered_contract": {
+      "status": "PASS"
+    },
+    "employee_concurrency": {
+      "status": "PASS",
+      "statuses": [
+        201,
+        409
+      ],
+      "stored_documents": 1,
+      "dispatch_gap_ms": 0.213
+    },
+    "employee_create_validation_and_storage": {
+      "status": "PASS"
+    },
+    "employee_listing_and_pagination": {
+      "status": "PASS"
+    },
+    "punch_concurrency": {
+      "status": "PASS",
+      "statuses": [
+        201,
+        409
+      ],
+      "stored_documents": 1,
+      "dispatch_gap_ms": 0.441
+    },
+    "punch_validation_dates_and_storage": {
+      "status": "PASS"
+    },
+    "attendance_listing_filters_history_legacy": {
+      "status": "PASS"
+    },
+    "indexes_and_repeated_setup": {
+      "status": "PASS",
+      "indexes": [
+        {
+          "collection": "employees",
+          "name": "employee_code_unique",
+          "keys": [
+            [
+              "emp_code",
+              1
+            ]
+          ],
+          "unique": true
+        },
+        {
+          "collection": "employees",
+          "name": "employee_department_code",
+          "keys": [
+            [
+              "department",
+              1
+            ],
+            [
+              "emp_code",
+              1
+            ]
+          ],
+          "unique": false
+        },
+        {
+          "collection": "attendance_logs",
+          "name": "attendance_employee_date_unique",
+          "keys": [
+            [
+              "emp_code",
+              1
+            ],
+            [
+              "date",
+              1
+            ]
+          ],
+          "unique": true
+        },
+        {
+          "collection": "attendance_logs",
+          "name": "attendance_date_code",
+          "keys": [
+            [
+              "date",
+              -1
+            ],
+            [
+              "emp_code",
+              1
+            ]
+          ],
+          "unique": false
+        },
+        {
+          "collection": "attendance_logs",
+          "name": "attendance_latest_punch",
+          "keys": [
+            [
+              "emp_code",
+              1
+            ],
+            [
+              "punch_in",
+              -1
+            ],
+            [
+              "date",
+              -1
+            ]
+          ],
+          "unique": false
+        },
+        {
+          "collection": "employees",
+          "name": "employee_joined_department",
+          "keys": [
+            [
+              "joined_on",
+              1
+            ],
+            [
+              "department",
+              1
+            ]
+          ],
+          "unique": false
+        },
+        {
+          "collection": "employees",
+          "name": "employee_department_joined",
+          "keys": [
+            [
+              "department",
+              1
+            ],
+            [
+              "joined_on",
+              1
+            ]
+          ],
+          "unique": false
+        }
+      ]
+    },
+    "phase8_dataset": {
+      "status": "PASS",
+      "inserted": {
+        "employees": 1050,
+        "attendance_logs": 100000
+      },
+      "planned_employees": 1050,
+      "planned_attendance": 100000,
+      "estimated_logical_bson_bytes": 20242245,
+      "advisory_capacity_budget_bytes": 94281167,
+      "estimate_method": "BSON plus ObjectId; 3x plus 32MiB advisory index/headroom budget; not measured storage"
+    },
+    "phase8_full_dataset_startup": {
+      "status": "PASS",
+      "seconds": [
+        3.26,
+        2.134
+      ],
+      "limit_seconds": 20,
+      "qualification": "first fresh startup creates all seven indexes on full data; second verifies idempotence"
+    },
+    "phase8_analytics_oracles": {
+      "status": "PASS",
+      "bounded_probe_records": 500
+    },
+    "phase8_pagination": {
+      "status": "PASS",
+      "maximum_transferred_items": 100
+    },
+    "phase8_pagination_plans": {
+      "status": "PASS",
+      "plans": {
+        "employees_offset_0": {
+          "stages": [
+            "FETCH",
+            "IXSCAN",
+            "LIMIT",
+            "PROJECTION_SIMPLE"
+          ],
+          "indexes": [
+            "employee_code_unique"
+          ],
+          "statistics": [
+            {
+              "totalKeysExamined": 100,
+              "totalDocsExamined": 100,
+              "nReturned": 100,
+              "executionTimeMillis": 0
+            },
+            {
+              "nReturned": 100,
+              "executionTimeMillisEstimate": 0
+            },
+            {
+              "nReturned": 100,
+              "executionTimeMillisEstimate": 0
+            },
+            {
+              "nReturned": 100,
+              "executionTimeMillisEstimate": 0
+            },
+            {
+              "nReturned": 100,
+              "executionTimeMillisEstimate": 0
+            }
+          ],
+          "has_ixscan": true,
+          "has_collection_scan": false
+        },
+        "employees_offset_526": {
+          "stages": [
+            "FETCH",
+            "IXSCAN",
+            "LIMIT",
+            "PROJECTION_SIMPLE",
+            "SKIP"
+          ],
+          "indexes": [
+            "employee_code_unique"
+          ],
+          "statistics": [
+            {
+              "totalKeysExamined": 626,
+              "totalDocsExamined": 100,
+              "nReturned": 100,
+              "executionTimeMillis": 0
+            },
+            {
+              "nReturned": 100,
+              "executionTimeMillisEstimate": 0
+            },
+            {
+              "nReturned": 100,
+              "executionTimeMillisEstimate": 0
+            },
+            {
+              "nReturned": 100,
+              "executionTimeMillisEstimate": 0
+            },
+            {
+              "nReturned": 100,
+              "executionTimeMillisEstimate": 0
+            },
+            {
+              "nReturned": 626,
+              "executionTimeMillisEstimate": 0
+            }
+          ],
+          "has_ixscan": true,
+          "has_collection_scan": false
+        },
+        "employees_offset_953": {
+          "stages": [
+            "FETCH",
+            "IXSCAN",
+            "LIMIT",
+            "PROJECTION_SIMPLE",
+            "SKIP"
+          ],
+          "indexes": [
+            "employee_code_unique"
+          ],
+          "statistics": [
+            {
+              "totalKeysExamined": 1053,
+              "totalDocsExamined": 100,
+              "nReturned": 100,
+              "executionTimeMillis": 0
+            },
+            {
+              "nReturned": 100,
+              "executionTimeMillisEstimate": 1
+            },
+            {
+              "nReturned": 100,
+              "executionTimeMillisEstimate": 1
+            },
+            {
+              "nReturned": 100,
+              "executionTimeMillisEstimate": 1
+            },
+            {
+              "nReturned": 100,
+              "executionTimeMillisEstimate": 1
+            },
+            {
+              "nReturned": 1053,
+              "executionTimeMillisEstimate": 1
+            }
+          ],
+          "has_ixscan": true,
+          "has_collection_scan": false
+        },
+        "attendance_logs_offset_0": {
+          "stages": [
+            "FETCH",
+            "IXSCAN",
+            "LIMIT",
+            "PROJECTION_SIMPLE"
+          ],
+          "indexes": [
+            "attendance_date_code"
+          ],
+          "statistics": [
+            {
+              "totalKeysExamined": 100,
+              "totalDocsExamined": 100,
+              "nReturned": 100,
+              "executionTimeMillis": 0
+            },
+            {
+              "nReturned": 100,
+              "executionTimeMillisEstimate": 0
+            },
+            {
+              "nReturned": 100,
+              "executionTimeMillisEstimate": 0
+            },
+            {
+              "nReturned": 100,
+              "executionTimeMillisEstimate": 0
+            },
+            {
+              "nReturned": 100,
+              "executionTimeMillisEstimate": 0
+            }
+          ],
+          "has_ixscan": true,
+          "has_collection_scan": false
+        },
+        "attendance_logs_offset_50000": {
+          "stages": [
+            "FETCH",
+            "IXSCAN",
+            "LIMIT",
+            "PROJECTION_SIMPLE",
+            "SKIP"
+          ],
+          "indexes": [
+            "attendance_date_code"
+          ],
+          "statistics": [
+            {
+              "totalKeysExamined": 50100,
+              "totalDocsExamined": 100,
+              "nReturned": 100,
+              "executionTimeMillis": 35
+            },
+            {
+              "nReturned": 100,
+              "executionTimeMillisEstimate": 26
+            },
+            {
+              "nReturned": 100,
+              "executionTimeMillisEstimate": 25
+            },
+            {
+              "nReturned": 100,
+              "executionTimeMillisEstimate": 25
+            },
+            {
+              "nReturned": 100,
+              "executionTimeMillisEstimate": 25
+            },
+            {
+              "nReturned": 50100,
+              "executionTimeMillisEstimate": 25
+            }
+          ],
+          "has_ixscan": true,
+          "has_collection_scan": false
+        },
+        "attendance_logs_offset_99900": {
+          "stages": [
+            "FETCH",
+            "IXSCAN",
+            "LIMIT",
+            "PROJECTION_SIMPLE",
+            "SKIP"
+          ],
+          "indexes": [
+            "attendance_date_code"
+          ],
+          "statistics": [
+            {
+              "totalKeysExamined": 100000,
+              "totalDocsExamined": 100,
+              "nReturned": 100,
+              "executionTimeMillis": 70
+            },
+            {
+              "nReturned": 100,
+              "executionTimeMillisEstimate": 63
+            },
+            {
+              "nReturned": 100,
+              "executionTimeMillisEstimate": 61
+            },
+            {
+              "nReturned": 100,
+              "executionTimeMillisEstimate": 61
+            },
+            {
+              "nReturned": 100,
+              "executionTimeMillisEstimate": 59
+            },
+            {
+              "nReturned": 100000,
+              "executionTimeMillisEstimate": 58
+            }
+          ],
+          "has_ixscan": true,
+          "has_collection_scan": false
+        }
+      }
+    },
+    "phase8_explain_evidence": {
+      "status": "PASS",
+      "targets": {
+        "attendance_list": {
+          "stages": [
+            "FETCH",
+            "IXSCAN",
+            "LIMIT",
+            "PROJECTION_SIMPLE"
+          ],
+          "indexes": [
+            "attendance_employee_date_unique"
+          ],
+          "statistics": [
+            {
+              "totalKeysExamined": 20,
+              "totalDocsExamined": 20,
+              "nReturned": 20,
+              "executionTimeMillis": 0
+            },
+            {
+              "nReturned": 20,
+              "executionTimeMillisEstimate": 0
+            },
+            {
+              "nReturned": 20,
+              "executionTimeMillisEstimate": 0
+            },
+            {
+              "nReturned": 20,
+              "executionTimeMillisEstimate": 0
+            },
+            {
+              "nReturned": 20,
+              "executionTimeMillisEstimate": 0
+            }
+          ],
+          "has_ixscan": true,
+          "has_collection_scan": false
+        },
+        "employee_monthly": {
+          "stages": [
+            "FETCH",
+            "IXSCAN",
+            "PROJECTION_SIMPLE"
+          ],
+          "indexes": [
+            "attendance_employee_date_unique",
+            "employee_code_unique"
+          ],
+          "statistics": [
+            {
+              "nReturned": 1,
+              "executionTimeMillisEstimate": 0
+            },
+            {
+              "totalKeysExamined": 1,
+              "totalDocsExamined": 1,
+              "nReturned": 1,
+              "executionTimeMillis": 1
+            },
+            {
+              "nReturned": 1,
+              "executionTimeMillisEstimate": 0
+            },
+            {
+              "nReturned": 1,
+              "executionTimeMillisEstimate": 0
+            },
+            {
+              "nReturned": 1,
+              "executionTimeMillisEstimate": 0
+            },
+            {
+              "totalKeysExamined": 26,
+              "totalDocsExamined": 26,
+              "nReturned": 1,
+              "executionTimeMillisEstimate": 1,
+              "collectionScans": 0
+            },
+            {
+              "nReturned": 1,
+              "executionTimeMillisEstimate": 1
+            },
+            {
+              "nReturned": 1,
+              "executionTimeMillisEstimate": 1
+            }
+          ],
+          "has_ixscan": true,
+          "has_collection_scan": false
+        },
+        "department_summary": {
+          "stages": [
+            "FETCH",
+            "IXSCAN",
+            "PROJECTION_SIMPLE"
+          ],
+          "indexes": [
+            "attendance_employee_date_unique",
+            "employee_department_joined"
+          ],
+          "statistics": [
+            {
+              "nReturned": 199,
+              "executionTimeMillisEstimate": 2
+            },
+            {
+              "totalKeysExamined": 199,
+              "totalDocsExamined": 199,
+              "nReturned": 199,
+              "executionTimeMillis": 113
+            },
+            {
+              "nReturned": 199,
+              "executionTimeMillisEstimate": 0
+            },
+            {
+              "nReturned": 199,
+              "executionTimeMillisEstimate": 0
+            },
+            {
+              "nReturned": 199,
+              "executionTimeMillisEstimate": 0
+            },
+            {
+              "totalKeysExamined": 5241,
+              "totalDocsExamined": 5241,
+              "nReturned": 199,
+              "executionTimeMillisEstimate": 112,
+              "collectionScans": 0
+            },
+            {
+              "nReturned": 199,
+              "executionTimeMillisEstimate": 112
+            },
+            {
+              "nReturned": 1,
+              "executionTimeMillisEstimate": 113
+            },
+            {
+              "nReturned": 1,
+              "executionTimeMillisEstimate": 113
+            },
+            {
+              "nReturned": 1,
+              "executionTimeMillisEstimate": 113
+            }
+          ],
+          "has_ixscan": true,
+          "has_collection_scan": false
+        },
+        "late_leaderboard": {
+          "stages": [
+            "FETCH",
+            "GROUP",
+            "IXSCAN",
+            "filter",
+            "group",
+            "ixseek",
+            "limit",
+            "nlj",
+            "project",
+            "seek"
+          ],
+          "indexes": [
+            "attendance_date_code",
+            "employee_code_unique"
+          ],
+          "statistics": [
+            {
+              "nReturned": 1000,
+              "executionTimeMillisEstimate": 50
+            },
+            {
+              "totalKeysExamined": 26333,
+              "totalDocsExamined": 26333,
+              "nReturned": 1000,
+              "executionTimeMillis": 218
+            },
+            {
+              "nReturned": 1000,
+              "executionTimeMillisEstimate": 49
+            },
+            {
+              "nReturned": 1000,
+              "executionTimeMillisEstimate": 49
+            },
+            {
+              "nReturned": 1000,
+              "executionTimeMillisEstimate": 49
+            },
+            {
+              "nReturned": 4200,
+              "executionTimeMillisEstimate": 49
+            },
+            {
+              "nReturned": 4200,
+              "executionTimeMillisEstimate": 49
+            },
+            {
+              "totalKeysExamined": 26333,
+              "totalDocsExamined": 26333,
+              "nReturned": 26333,
+              "executionTimeMillisEstimate": 49,
+              "collectionScans": 0
+            },
+            {
+              "nReturned": 26333,
+              "executionTimeMillisEstimate": 8
+            },
+            {
+              "nReturned": 26333,
+              "executionTimeMillisEstimate": 27
+            },
+            {
+              "nReturned": 26333,
+              "executionTimeMillisEstimate": 27
+            },
+            {
+              "totalKeysExamined": 1000,
+              "totalDocsExamined": 1000,
+              "nReturned": 1000,
+              "executionTimeMillisEstimate": 214,
+              "collectionScans": 0
+            },
+            {
+              "nReturned": 1000,
+              "executionTimeMillisEstimate": 214
+            },
+            {
+              "nReturned": 1000,
+              "executionTimeMillisEstimate": 214
+            },
+            {
+              "nReturned": 401,
+              "executionTimeMillisEstimate": 214
+            },
+            {
+              "nReturned": 401,
+              "executionTimeMillisEstimate": 214
+            },
+            {
+              "nReturned": 401,
+              "executionTimeMillisEstimate": 214
+            }
+          ],
+          "has_ixscan": true,
+          "has_collection_scan": false
+        },
+        "department_trend": {
+          "stages": [
+            "EXPRESS_IXSCAN"
+          ],
+          "indexes": [
+            "attendance_date_code",
+            "employee_department_code",
+            "employee_department_joined"
+          ],
+          "statistics": [
+            {
+              "nReturned": 1,
+              "executionTimeMillisEstimate": 1
+            },
+            {
+              "totalKeysExamined": 1,
+              "totalDocsExamined": 1,
+              "nReturned": 1,
+              "executionTimeMillis": 4166
+            },
+            {
+              "nReturned": 1
+            },
+            {
+              "nReturned": 1,
+              "executionTimeMillisEstimate": 1
+            },
+            {
+              "nReturned": 29,
+              "executionTimeMillisEstimate": 1
+            },
+            {
+              "nReturned": 29,
+              "executionTimeMillisEstimate": 1
+            },
+            {
+              "totalKeysExamined": 5771,
+              "totalDocsExamined": 5771,
+              "nReturned": 29,
+              "executionTimeMillisEstimate": 24,
+              "collectionScans": 0
+            },
+            {
+              "totalKeysExamined": 31574,
+              "totalDocsExamined": 31574,
+              "nReturned": 29,
+              "executionTimeMillisEstimate": 4165,
+              "collectionScans": 0
+            },
+            {
+              "nReturned": 29,
+              "executionTimeMillisEstimate": 4165
+            },
+            {
+              "nReturned": 29,
+              "executionTimeMillisEstimate": 4165
+            },
+            {
+              "nReturned": 29,
+              "executionTimeMillisEstimate": 4166
+            },
+            {
+              "nReturned": 29,
+              "executionTimeMillisEstimate": 4166
+            },
+            {
+              "nReturned": 29,
+              "executionTimeMillisEstimate": 4166
+            },
+            {
+              "nReturned": 29,
+              "executionTimeMillisEstimate": 4166
+            }
+          ],
+          "has_ixscan": true,
+          "has_collection_scan": false
+        }
+      },
+      "metrics": "per node; overlapping totals are never added"
+    },
+    "phase8_two_client_concurrency": {
+      "status": "PASS",
+      "correction_statuses": [
+        409,
+        200
+      ]
+    },
+    "phase8_latency": {
+      "status": "PASS",
+      "endpoints": {
+        "health": {
+          "status": "MEASURED",
+          "samples": 5,
+          "median_ms": 56.94459984079003,
+          "p95_ms": 63.98790003731847,
+          "max_ms": 63.98790003731847,
+          "failure_count": 0,
+          "http_statuses": {
+            "200": 5
+          },
+          "qualification": "client/network latency; descriptive small sample p95, not statistically representative"
+        },
+        "employees": {
+          "status": "MEASURED",
+          "samples": 5,
+          "median_ms": 139.58389987237751,
+          "p95_ms": 143.5442001093179,
+          "max_ms": 143.5442001093179,
+          "failure_count": 0,
+          "http_statuses": {
+            "200": 5
+          },
+          "qualification": "client/network latency; descriptive small sample p95, not statistically representative"
+        },
+        "attendance": {
+          "status": "MEASURED",
+          "samples": 5,
+          "median_ms": 158.53749983944,
+          "p95_ms": 166.4989001583308,
+          "max_ms": 166.4989001583308,
+          "failure_count": 0,
+          "http_statuses": {
+            "200": 5
+          },
+          "qualification": "client/network latency; descriptive small sample p95, not statistically representative"
+        },
+        "monthly": {
+          "status": "MEASURED",
+          "samples": 5,
+          "median_ms": 64.44890005514026,
+          "p95_ms": 68.58860002830625,
+          "max_ms": 68.58860002830625,
+          "failure_count": 0,
+          "http_statuses": {
+            "200": 5
+          },
+          "qualification": "client/network latency; descriptive small sample p95, not statistically representative"
+        },
+        "summary": {
+          "status": "MEASURED",
+          "samples": 5,
+          "median_ms": 589.1428000759333,
+          "p95_ms": 649.5378999970853,
+          "max_ms": 649.5378999970853,
+          "failure_count": 0,
+          "http_statuses": {
+            "200": 5
+          },
+          "qualification": "client/network latency; descriptive small sample p95, not statistically representative"
+        },
+        "leaderboard": {
+          "status": "MEASURED",
+          "samples": 5,
+          "median_ms": 338.26749981381,
+          "p95_ms": 353.4780000336468,
+          "max_ms": 353.4780000336468,
+          "failure_count": 0,
+          "http_statuses": {
+            "200": 5
+          },
+          "qualification": "client/network latency; descriptive small sample p95, not statistically representative"
+        },
+        "trend": {
+          "status": "MEASURED",
+          "samples": 5,
+          "median_ms": 3889.789099805057,
+          "p95_ms": 3915.695199975744,
+          "max_ms": 3915.695199975744,
+          "failure_count": 0,
+          "http_statuses": {
+            "200": 5
+          },
+          "qualification": "client/network latency; descriptive small sample p95, not statistically representative"
+        },
+        "monthly_oracle": {
+          "status": "MEASURED",
+          "samples": 1,
+          "median_ms": 55.254200007766485,
+          "p95_ms": 55.254200007766485,
+          "max_ms": 55.254200007766485,
+          "failure_count": 0,
+          "http_statuses": {
+            "200": 1
+          },
+          "qualification": "client/network latency; descriptive small sample p95, not statistically representative"
+        },
+        "summary_oracle": {
+          "status": "MEASURED",
+          "samples": 1,
+          "median_ms": 74.17439995333552,
+          "p95_ms": 74.17439995333552,
+          "max_ms": 74.17439995333552,
+          "failure_count": 0,
+          "http_statuses": {
+            "200": 1
+          },
+          "qualification": "client/network latency; descriptive small sample p95, not statistically representative"
+        },
+        "leaderboard_oracle": {
+          "status": "MEASURED",
+          "samples": 1,
+          "median_ms": 252.89909983985126,
+          "p95_ms": 252.89909983985126,
+          "max_ms": 252.89909983985126,
+          "failure_count": 0,
+          "http_statuses": {
+            "200": 1
+          },
+          "qualification": "client/network latency; descriptive small sample p95, not statistically representative"
+        },
+        "trend_oracle": {
+          "status": "MEASURED",
+          "samples": 1,
+          "median_ms": 3745.1720000244677,
+          "p95_ms": 3745.1720000244677,
+          "max_ms": 3745.1720000244677,
+          "failure_count": 0,
+          "http_statuses": {
+            "200": 1
+          },
+          "qualification": "client/network latency; descriptive small sample p95, not statistically representative"
+        },
+        "zero_logs": {
+          "status": "MEASURED",
+          "samples": 1,
+          "median_ms": 74.65329999104142,
+          "p95_ms": 74.65329999104142,
+          "max_ms": 74.65329999104142,
+          "failure_count": 0,
+          "http_statuses": {
+            "200": 1
+          },
+          "qualification": "client/network latency; descriptive small sample p95, not statistically representative"
+        },
+        "pagination_employees": {
+          "status": "MEASURED",
+          "samples": 4,
+          "median_ms": 119.35894994530827,
+          "p95_ms": 144.36559984460473,
+          "max_ms": 144.36559984460473,
+          "failure_count": 0,
+          "http_statuses": {
+            "200": 4
+          },
+          "qualification": "client/network latency; descriptive small sample p95, not statistically representative"
+        },
+        "pagination_attendance_logs": {
+          "status": "MEASURED",
+          "samples": 4,
+          "median_ms": 208.62269983626902,
+          "p95_ms": 247.81560013070703,
+          "max_ms": 247.81560013070703,
+          "failure_count": 0,
+          "http_statuses": {
+            "200": 4
+          },
+          "qualification": "client/network latency; descriptive small sample p95, not statistically representative"
+        },
+        "filtered_pagination": {
+          "status": "MEASURED",
+          "samples": 2,
+          "median_ms": 104.2930498952046,
+          "p95_ms": 115.29819993302226,
+          "max_ms": 115.29819993302226,
+          "failure_count": 0,
+          "http_statuses": {
+            "200": 2
+          },
+          "qualification": "client/network latency; descriptive small sample p95, not statistically representative"
+        },
+        "explain": {
+          "status": "MEASURED",
+          "samples": 5,
+          "median_ms": 173.18659997545183,
+          "p95_ms": 4234.620600007474,
+          "max_ms": 4234.620600007474,
+          "failure_count": 0,
+          "http_statuses": {
+            "200": 5
+          },
+          "qualification": "client/network latency; descriptive small sample p95, not statistically representative"
+        },
+        "create": {
+          "status": "MEASURED",
+          "samples": 2,
+          "median_ms": 56.31825001910329,
+          "p95_ms": 60.408700024709105,
+          "max_ms": 60.408700024709105,
+          "failure_count": 0,
+          "http_statuses": {
+            "201": 1,
+            "409": 1
+          },
+          "qualification": "client/network latency; descriptive small sample p95, not statistically representative"
+        },
+        "punch_in": {
+          "status": "MEASURED",
+          "samples": 2,
+          "median_ms": 90.55144991725683,
+          "p95_ms": 92.97889983281493,
+          "max_ms": 92.97889983281493,
+          "failure_count": 0,
+          "http_statuses": {
+            "201": 1,
+            "409": 1
+          },
+          "qualification": "client/network latency; descriptive small sample p95, not statistically representative"
+        },
+        "punch_out": {
+          "status": "MEASURED",
+          "samples": 2,
+          "median_ms": 129.11495007574558,
+          "p95_ms": 134.40930005162954,
+          "max_ms": 134.40930005162954,
+          "failure_count": 0,
+          "http_statuses": {
+            "200": 1,
+            "409": 1
+          },
+          "qualification": "client/network latency; descriptive small sample p95, not statistically representative"
+        },
+        "correction": {
+          "status": "MEASURED",
+          "samples": 2,
+          "median_ms": 122.99865006934851,
+          "p95_ms": 123.22210008278489,
+          "max_ms": 123.22210008278489,
+          "failure_count": 0,
+          "http_statuses": {
+            "409": 1,
+            "200": 1
+          },
+          "qualification": "client/network latency; descriptive small sample p95, not statistically representative"
+        },
+        "independent_correction": {
+          "status": "MEASURED",
+          "samples": 2,
+          "median_ms": 124.8018000042066,
+          "p95_ms": 134.0524998959154,
+          "max_ms": 134.0524998959154,
+          "failure_count": 0,
+          "http_statuses": {
+            "200": 2
+          },
+          "qualification": "client/network latency; descriptive small sample p95, not statistically representative"
+        }
+      },
+      "memory": {
+        "before": {
+          "status": "MEASURED",
+          "rss_bytes": 75833344,
+          "qualification": "process RSS snapshot; peak NOT MEASURED"
+        },
+        "after": {
+          "status": "MEASURED",
+          "rss_bytes": 77885440,
+          "qualification": "process RSS snapshot; peak NOT MEASURED"
+        },
+        "peak": "NOT MEASURED"
+      }
+    },
+    "phase8_storage": {
+      "status": "PASS",
+      "database_stats": {
+        "objects": 101063,
+        "dataSize": 20245327,
+        "storageSize": 5816320,
+        "indexSize": 8339456
+      }
+    },
+    "attendance_db_unchanged": {
+      "status": "PASS",
+      "counts": {
+        "employees": 6,
+        "attendance_logs": 9
+      }
+    }
+  },
+  "http_requests": 111,
+  "status": "PASS",
+  "development_counts_before": {
+    "employees": 6,
+    "attendance_logs": 9
+  },
+  "server_process_stopped": true,
+  "cleanup": "PASS"
+}

@@ -1,0 +1,15 @@
+{
+  "scope": "isolated only",
+  "status": "PASS",
+  "automated_tests": 211,
+  "failed": 0,
+  "new_phase8_tests": 37,
+  "retained_tests": 174,
+  "duration_seconds": 31.251,
+  "live_http_requests": 0,
+  "live_records_inserted": 0,
+  "live_performance": "NOT MEASURED",
+  "actual_atlas_capacity": "NOT MEASURED",
+  "cleanup": "NOT_NEEDED",
+  "application_changed": false
+}
