@@ -1,10 +1,10 @@
-# DECISIONS.md  (about 150-200 words in total - plain language, your own words)
+# DECISIONS.md
 
-1. **Indexes.** Which indexes did you create, and which query or guarantee does each one serve? Which one did you consider and reject?
-2. **Punch-in race.** Two identical punch-in requests arrive at the same instant. Walk through exactly what happens in your code.
-3. **Ties.** Two employees are tied on late minutes at the cutoff of `limit`. What does your leaderboard return, and why?
-4. **Headcount.** How does your department summary make sure employees with zero logs are counted?
-5. **One thing you would change** if this had to serve 100x the data.
+1. **Indexes.** Seven application indexes serve unique employee codes, unique employee/day attendance, department/code listing, date/code listing, latest punch selection, joining-date summary eligibility, and department/joining-date headcount. Phase 5 adds the last two employee indexes. Their different leading fields support global month eligibility and department-scoped daily cutoffs. I rejected another attendance month index: existing date/code and employee/date indexes already cover the bounded reads; another index adds write cost without an established query benefit.
+2. **Punch-in race.** Both requests read the employee and attempt insertion. MongoDB's unique employee/date index commits one insertion. The other raises DuplicateKeyError, mapped to HTTP 409; the successful request returns 201. There is no process-local lock or check-then-insert guarantee.
+3. **Ties.** MongoDB rank uses total late minutes alone; equal totals share rank, with gaps afterward. Department filtering happens before ranking. Rank <= limit includes everyone tied at the cutoff, then employee code stabilizes output order.
+4. **Headcount.** Summary starts from eligible employees, not attendance. A grouped lookup supplies zero defaults for missing logs, preserving their headcount contribution.
+5. **100x data.** I would measure real query plans first, then consider incrementally maintained daily summaries for frequently repeated reports. That reduces repeated scans but adds correction-invalidation complexity; it is not implemented here.
 
 ## Phase 4 decisions
 
@@ -16,4 +16,13 @@
 - The existing four indexes remain. `attendance_latest_punch` on `(emp_code ASC, punch_in DESC, date DESC)` supports the employee-scoped latest-candidate query. Snapshot updates use the unique natural-key index. Large-data query plans and performance still need live measurement.
 - The opt-in Phase 4 verifier shares Phase 3's collision, ownership, Windows interpreter, child PID/database/token, bound-port and cleanup protections. Its 35-byte `hrone_p4v_` names and separate result file distinguish Phase 4 runs. It is prepared and isolated-tested, not executed against Atlas.
 
-The five original submission questions above are retained. Analytics-specific answers and implementations remain for later phases; Phase 4 does not claim to have implemented them.
+The Phase 4 verifier was subsequently executed manually: the saved result records PASS, 68 HTTP requests and 3.627-second cold startup with five indexes. The earlier preparation-only statement describes the original implementation session.
+
+## Phase 5 business rules and aggregation
+
+- Monthly working days use MongoDB-generated Mon-Fri dates starting at joined_on. Monthly and summary present_days exclude pre-join logs, as explicitly clarified by the user; half-days contribute 0.5. Leave, late and overtime totals retain their stated month filters, including weekends. Stored calculated values are authoritative.
+- Summary eligibility is joined_on <= month end. Presence-status, non-null work_hours are averaged across records, including weekends; employee averages are not averaged together. A department with eligible employees but no logs remains visible with zero counts and null average.
+- Trend creates every requested calendar day in MongoDB, for inclusive ranges of 1-92 days. Headcount changes on each joining date. Daily presence follows the day/status/half-day rules; no additional joining-date filter is imposed on trend records. Weekends have null rates; weekday positive-headcount gaps have zero rates. The seven-row window uses only returned rows, ignores null rates and averages their rounded values.
+- MongoDB `$round` uses ties-to-even, so explicit Decimal128 arithmetic implements half-up: two places for percentages/hours, four for rates/window averages. Decimal intermediates survive until JSON-number projection. See [MongoDB rounding documentation](https://www.mongodb.com/docs/manual/reference/operator/aggregation/round/).
+- Four reusable pipelines use bounded lookups and grouped results, not Python collection scans. Calendar construction uses `$range`/`$map` and `$dateAdd`; ranking/windows use `$setWindowFields`. There are no analytics startup queries or background jobs. The existing startup audit remains; seven-index startup time and large-data performance require live measurement.
+- Phase 5 live verification is prepared only. It seeds deterministic fixtures in a collision-checked, owned 35-byte hrone_p5v_ database, validates real HTTP against the unchanged YAML and independent expectations, compares BSON before/after analytics, and reuses strict identity/cleanup protections. It has not been run against Atlas.

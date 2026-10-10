@@ -1,0 +1,191 @@
+{
+  "database": "hrone_p5v_20261010_31b21aeabfb545ce",
+  "date_ist": "2026-10-10T08:14:07.408684+05:30",
+  "checks": {
+    "cold_startup": {
+      "status": "PASS",
+      "seconds": 2.55,
+      "limit_seconds": 20,
+      "includes": "process spawn, imports, fresh MongoDB connection, new indexes, bind and health ping"
+    },
+    "health": {
+      "status": "PASS"
+    },
+    "registered_contract": {
+      "status": "PASS"
+    },
+    "employee_concurrency": {
+      "status": "PASS",
+      "statuses": [
+        201,
+        409
+      ],
+      "stored_documents": 1,
+      "dispatch_gap_ms": 0.284
+    },
+    "employee_create_validation_and_storage": {
+      "status": "PASS"
+    },
+    "employee_listing_and_pagination": {
+      "status": "PASS"
+    },
+    "punch_concurrency": {
+      "status": "PASS",
+      "statuses": [
+        201,
+        409
+      ],
+      "stored_documents": 1,
+      "dispatch_gap_ms": 0.472
+    },
+    "punch_validation_dates_and_storage": {
+      "status": "PASS"
+    },
+    "attendance_listing_filters_history_legacy": {
+      "status": "PASS"
+    },
+    "indexes_and_repeated_setup": {
+      "status": "PASS",
+      "indexes": [
+        {
+          "collection": "employees",
+          "name": "employee_code_unique",
+          "keys": [
+            [
+              "emp_code",
+              1
+            ]
+          ],
+          "unique": true
+        },
+        {
+          "collection": "employees",
+          "name": "employee_department_code",
+          "keys": [
+            [
+              "department",
+              1
+            ],
+            [
+              "emp_code",
+              1
+            ]
+          ],
+          "unique": false
+        },
+        {
+          "collection": "attendance_logs",
+          "name": "attendance_employee_date_unique",
+          "keys": [
+            [
+              "emp_code",
+              1
+            ],
+            [
+              "date",
+              1
+            ]
+          ],
+          "unique": true
+        },
+        {
+          "collection": "attendance_logs",
+          "name": "attendance_date_code",
+          "keys": [
+            [
+              "date",
+              -1
+            ],
+            [
+              "emp_code",
+              1
+            ]
+          ],
+          "unique": false
+        },
+        {
+          "collection": "attendance_logs",
+          "name": "attendance_latest_punch",
+          "keys": [
+            [
+              "emp_code",
+              1
+            ],
+            [
+              "punch_in",
+              -1
+            ],
+            [
+              "date",
+              -1
+            ]
+          ],
+          "unique": false
+        },
+        {
+          "collection": "employees",
+          "name": "employee_joined_department",
+          "keys": [
+            [
+              "joined_on",
+              1
+            ],
+            [
+              "department",
+              1
+            ]
+          ],
+          "unique": false
+        },
+        {
+          "collection": "employees",
+          "name": "employee_department_joined",
+          "keys": [
+            [
+              "department",
+              1
+            ],
+            [
+              "joined_on",
+              1
+            ]
+          ],
+          "unique": false
+        }
+      ]
+    },
+    "phase5_monthly_oracles": {
+      "status": "PASS"
+    },
+    "phase5_summary_oracles": {
+      "status": "PASS"
+    },
+    "phase5_leaderboard_oracles_and_ties": {
+      "status": "PASS"
+    },
+    "phase5_trend_oracles": {
+      "status": "PASS"
+    },
+    "phase5_validation_contract": {
+      "status": "PASS"
+    },
+    "phase5_analytics_read_only": {
+      "status": "PASS"
+    },
+    "attendance_db_unchanged": {
+      "status": "PASS",
+      "counts": {
+        "employees": 6,
+        "attendance_logs": 9
+      }
+    }
+  },
+  "http_requests": 85,
+  "status": "PASS",
+  "development_counts_before": {
+    "employees": 6,
+    "attendance_logs": 9
+  },
+  "server_process_stopped": true,
+  "cleanup": "PASS"
+}

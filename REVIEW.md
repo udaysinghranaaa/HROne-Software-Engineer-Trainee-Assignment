@@ -70,7 +70,7 @@ Also note anything you looked at and decided was **not** a defect, and why.
 - No employee-email uniqueness, joining-date punch restriction, authentication or holiday rule is added.
 - The OpenAPI version emitted by FastAPI differs from the supplied YAML version; the YAML is unchanged, and required route/field behavior is preserved.
 
-## Executed verification and limitations
+## Historical Phase 3 verification and limitations
 
 On 2026-10-09, `.venv/Scripts/python.exe -B -W error -m unittest discover -s tests -v` ran **35 tests: 35 passed, 0 failed, 0 skipped**. These are isolated helper/model/ASGI/lifecycle tests using unique-index-enforcing, thread-safe test doubles. They never connect to Atlas, load `.env`, or write live records. Race tests assert actual HTTP statuses and stored fake document counts. They are not live MongoDB race tests.
 
@@ -84,7 +84,7 @@ R1-R5 and R10 are covered for the existing routes/shared helpers; R6 presence-st
 
 Phase 3 implementation and isolated tests are complete. Final dedicated-database verification is **BLOCKED** as detailed below. Review this draft in your own words before final submission.
 
-## Final dedicated-database verification - 2026-10-09 (IST)
+## Historical Phase 3 dedicated-database verification - 2026-10-09 (IST)
 
 The command `.venv/Scripts/python.exe -B tests/final_phase3_verification.py` was attempted once inside the sandbox and twice outside it. All three attempts failed at the initial MongoDB ping with `ConfigurationError`, categorized safely as DNS / resolution lifetime expired / timed out. No raw exception text or credentials were printed.
 
@@ -127,3 +127,28 @@ Results are saved in `tests/phase3_final_results.json`. PASS below means the app
 | D27 | Startup audit and idempotent indexes | PASS | Prior four-index existence PASS; fresh startup/timing BLOCKED | PARTIAL |
 
 Phase 4 was not started. Complete the prepared dedicated verification where Atlas DNS/network access works before final Phase 3 verification sign-off. No application code, credentials, Atlas settings, original contract, problem statement or existing development records were changed by this final verification task.
+
+## Current Phase 5 verification - 2026-10-10 (IST)
+
+This section supersedes the historical phase-status statements above. The saved `tests/phase4_final_results.json` records PASS for 16 checks, 68 HTTP requests, 3.627-second cold startup, five indexes, unchanged development data (6 employees/9 attendance logs), stopped child and successful owned-database cleanup. Those results are from the previous manual run, not a Phase 5 run.
+
+Four GET analytics operations are implemented in `app/main.py` against the unchanged original YAML:
+
+| API | MongoDB design and verified isolated behavior |
+|---|---|
+| Employee monthly | Employee anchor and bounded grouped attendance lookup; database calendar counts weekday working days from joining; weekday presence excludes pre-join logs; legacy half-day defaults, zero months, leap months and null zero-denominator percentage covered. |
+| Department summary | Eligible employees anchor zero-log headcount; grouped monthly lookups feed department totals; record-weighted presence-status/non-null-hours average, weekday presence, joining eligibility and sorted/exact department filters covered. |
+| Late leaderboard | Month/positive-late match, employee grouping/join, department filtering before rank, competition ranking and rank cutoff; all ties at cutoff retained, orphan codes excluded, deterministic code ordering covered. |
+| Department trend | Database calendar with inclusive 1-92 dates, bounded daily headcount/attendance lookups, null weekend/zero-headcount rates, zero weekday gaps and seven-row null-ignoring window; changing headcount and requested-range-only window covered. |
+
+R7 clarification: exclude pre-join records from monthly and department present_days. Other metrics retain their stated contract filters. Trend present_count follows its separate daily status/half-day rule, including weekend records; weekends still have null attendance_rate. Stored late/overtime/hours are read without recalculation or audit changes. Explicit decimal half-up replaces MongoDB ties-to-even rounding: two decimal places for hours/percentages, four for rates/windows. Legacy missing half_day is false and missing minute totals are zero.
+
+Seven application indexes are declared. The five existing definitions are preserved. Phase 5 adds `employee_joined_department` (joined_on, department) for global month eligibility and `employee_department_joined` (department, joined_on) for daily department headcount. Attendance lookups reuse existing natural-key/date indexes. Index creation remains idempotent; no analytics reports execute at startup. Actual plans, large-dataset performance and seven-index cold startup are not measured yet.
+
+Executed: `.venv/Scripts/python.exe -B -m unittest discover -s tests -v`: **123 passed, 0 failed** (92 prior tests plus 31 Phase 5 tests). The new tests execute production pipelines in a strict test-only aggregation interpreter and compare responses with independently calculated fixture expectations. They cover half-up ties, missing fields, zeros, rank ties/limits, dates, ranges, query validation, exact YAML response schemas, registered operations, ownership rejection, test database naming and the complete Phase 5 callback using fake storage/HTTP. Existing Phase 3/4 regression tests pass; route/index-count assertions were extended for the new operations/indexes while preserving old definitions.
+
+These are isolated tests, not MongoDB server integration. The interpreter is not a replacement for MongoDB and does not establish real server operator compatibility, query plans, Decimal128 extreme-value behavior, HTTP concurrency or startup timing. Live verification remains **NOT EXECUTED**; no Phase 5 PASS artifact is fabricated. The prepared manual harness uses independent expectations and BSON snapshots on its strictly owned temporary database, sharing child PID/database/token/port checks, name length validation, collision checks and exact ownership-token cleanup protection. It does not use the development seed script.
+
+Final quality checks passed: AST syntax validation for 11 Python files; imports and route/schema assertions exercised by the isolated suite; `pip check` (no broken requirements); `git diff --check`; additional whitespace checks for new files; credential-URI exposure checks; six SHA-256 comparisons confirming the original contract, problem statement, data model, seed script and sample datasets are unchanged. No Phase 5 live result file exists. Git emitted only Windows line-ending normalization notices.
+
+No live database operations were performed during Phase 5 implementation or isolated testing. Existing development data, Atlas settings, original assignment/contract/model and sample datasets were not modified. No Phase 6 endpoint, Dockerfile or Git push was added. Run the manual command in README to obtain live evidence before Phase 5 integration sign-off.

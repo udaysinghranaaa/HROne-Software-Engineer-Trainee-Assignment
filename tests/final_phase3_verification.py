@@ -37,14 +37,14 @@ RESULT_FILE = ROOT / "tests/phase3_final_results.json"
 def guard_database(name, expected):
     if len(name.encode("utf-8")) > 38:
         raise RuntimeError("Test database name exceeds the 38-byte safety limit")
-    if name != expected or not re.fullmatch(r"hrone_p[34]v_[0-9]{8}_[0-9a-f]{16}", name):
+    if name != expected or not re.fullmatch(r"hrone_p[345]v_[0-9]{8}_[0-9a-f]{16}", name):
         raise RuntimeError("Unsafe test database identity; refusing writes or cleanup")
     if name == "attendance_db":
         raise RuntimeError("Development database must never be a write target")
 
 
 def generate_database_name(token, phase=3):
-    if phase not in (3, 4):
+    if phase not in (3, 4, 5):
         raise RuntimeError("Unsupported verification phase")
     name = f"hrone_p{phase}v_" + datetime.now(IST).strftime("%Y%m%d") + "_" + token[:16]
     guard_database(name, name)
@@ -315,6 +315,10 @@ def run_verification(extra_checks=None, phase=3):
             result["http_requests"] += 1
             assert status in expected, "Unexpected HTTP status for " + method + " " + path + ": " + str(status)
             contract_path = "/attendance/{emp_code}/{date}" if method == "PATCH" else path
+            if path.startswith("/analytics/employees/") and path.endswith("/monthly"):
+                contract_path = "/analytics/employees/{emp_code}/monthly"
+            elif path.startswith("/analytics/departments/") and path.endswith("/trend"):
+                contract_path = "/analytics/departments/{department}/trend"
             response_schema = contract["paths"][contract_path][method.lower()]["responses"][str(status)]
             if "$ref" in response_schema:
                 response_schema = contract["components"]["responses"][response_schema["$ref"].split("/")[-1]]
@@ -332,7 +336,9 @@ def run_verification(extra_checks=None, phase=3):
             actual = json.load(response)
         expected_ops = {("get", "/health"), ("post", "/employees"), ("get", "/employees"),
                         ("post", "/attendance/punch-in"), ("get", "/attendance"),
-                        ("post", "/attendance/punch-out"), ("patch", "/attendance/{emp_code}/{date}")}
+                        ("post", "/attendance/punch-out"), ("patch", "/attendance/{emp_code}/{date}"),
+                        ("get", "/analytics/employees/{emp_code}/monthly"), ("get", "/analytics/departments/summary"),
+                        ("get", "/analytics/leaderboard/late"), ("get", "/analytics/departments/{department}/trend")}
         assert {(method, path) for path, item in actual["paths"].items() for method in item} == expected_ops
         for method, path in expected_ops:
             assert actual["paths"][path][method]["operationId"] == contract["paths"][path][method]["operationId"]
@@ -476,7 +482,10 @@ def run_verification(extra_checks=None, phase=3):
         passed("indexes_and_repeated_setup", indexes=indexes)
         if extra_checks is not None:
             guard_database(database.name, name)
-            operation = "phase4.additional_checks"
+            operation = "_verification_owner.find_one.before_extra_checks"
+            assert database["_verification_owner"].find_one({"_id": "owner"}) == {
+                "_id": "owner", "database": name, "run_token": token}, "Ownership mismatch before extra checks"
+            operation = f"phase{phase}.additional_checks"
             extra_checks(http, database, codes, epoch, passed)
         result["status"] = "PASS"
     except PyMongoError as error:
